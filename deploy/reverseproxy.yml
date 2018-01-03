@@ -1,0 +1,30 @@
+version: "3"
+services:
+  Reverse_Proxy_Service:
+    deploy:
+      replicas: -1
+    image: sridmad/reverseproxyimage:0.1.0
+    volumes:
+    - /var/lib/sfcerts:/app/sfcerts
+    environment:
+      # Secure cluster settings
+      # - SF_ClientCertCommonName=
+      # - SF_ClientCertIssuerThumbprints=
+      # - SF_ClusterCertCommonNames=
+      # - SF_ClusterCertIssuerThumbprints=
+
+      # Request Handling settings
+      - HttpRequestConnectTimeoutMs=5000
+      - DefaultHttpRequestTimeoutMs=120000
+      # - RemoveServiceResponseHeaders
+
+      # Secure Reverse Proxy settings
+      - UseHttps=false
+      # - ReverseProxyCertThumbprint=
+
+      # Secure Service settings
+      # - ServiceCertificateHash=
+      # - ServiceCertificateAlternateNames=
+
+    ports:
+      - "19081:19081"
