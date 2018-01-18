@@ -1,0 +1,921 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using System.Fabric;
+using System.Fabric.Query;
+using Newtonsoft.Json.Linq;
+using ServiceFabric.Helpers;
+using Newtonsoft.Json;
+using System.IO;
+using System.Net.NetworkInformation;
+using System.Net;
+using System.Security.Cryptography.X509Certificates;
+
+namespace webapi
+{
+    public class cluster_ssl_context
+    {
+        static string ca_cert_file_path = "/var/lib/sfreverseproxycerts/servicecacert.pem";
+        public cluster_ssl_context(string verify_certificate_hash, List<string> verify_subject_alt_name)
+        {
+            this.verify_certificate_hash = verify_certificate_hash;
+            this.verify_subject_alt_name = verify_subject_alt_name;
+            if (File.Exists(ca_cert_file_path)) // change to check for existance of file
+            {
+                ca_cert_file = ca_cert_file_path;
+            }
+        }
+
+        [JsonProperty]
+        public string cert_chain_file = "/var/lib/sfreverseproxycerts/reverseproxycert.pem";
+
+        [JsonProperty]
+        public string private_key_file = "/var/lib/sfreverseproxycerts/reverseproxykey.pem";
+
+        [JsonProperty]
+        public string verify_certificate_hash;
+        public bool ShouldSerializeverify_certificate_hash()
+        {
+            return verify_certificate_hash != null;
+        }
+
+        [JsonProperty]
+        public List<string> verify_subject_alt_name;
+        public bool ShouldSerializeverify_subject_alt_name()
+        {
+            return verify_subject_alt_name != null && verify_subject_alt_name.Count != 0;
+        }
+
+        [JsonProperty]
+        public string ca_cert_file;
+        public bool ShouldSerializeca_cert_file()
+        {
+            return ca_cert_file != null;
+        }
+    }
+
+    public class EnvoyDefaults
+    {
+        public static void LogMessage(string message)
+        {
+            // Get the local time zone and the current local time and year.
+            DateTime currentDate = DateTime.Now;
+            System.Console.WriteLine("{0}, {1}", currentDate.ToString("O"), message);
+        }
+        static EnvoyDefaults()
+        {
+            var connectTimeout = Environment.GetEnvironmentVariable("HttpRequestConnectTimeoutMs");
+            if (connectTimeout != null)
+            {
+                try
+                {
+                    connect_timeout_ms = Convert.ToInt32(connectTimeout);
+                }
+                catch { }
+            }
+
+            var requestTimeout = Environment.GetEnvironmentVariable("DefaultHttpRequestTimeoutMs");
+            if (requestTimeout != null)
+            {
+                try
+                {
+                    timeout_ms = Convert.ToInt32(requestTimeout);
+                }
+                catch { }
+            }
+
+            var removeResponseHeaders = Environment.GetEnvironmentVariable("RemoveServiceResponseHeaders");
+            if (removeResponseHeaders != null)
+            {
+                try
+                {
+                    response_headers_to_remove.AddRange(removeResponseHeaders.Replace(" ", "").Split(','));
+                }
+                catch { }
+            }
+
+            var useHttps = Environment.GetEnvironmentVariable("UseHttps");
+            if (useHttps != null && useHttps == "true")
+            {
+                var verify_certificate_hash = Environment.GetEnvironmentVariable("ServiceCertificateHash");
+
+                var subjectAlternateName = Environment.GetEnvironmentVariable("ServiceCertificateAlternateNames");
+                if (subjectAlternateName != null)
+                {
+                    try
+                    {
+                        verify_subject_alt_name.AddRange(subjectAlternateName.Replace(" ", "").Split(','));
+                    }
+                    catch { }
+                }
+                cluster_ssl_context = new cluster_ssl_context(verify_certificate_hash, verify_subject_alt_name);
+            }
+
+            host_ip = Environment.GetEnvironmentVariable("Fabric_NodeIPOrFQDN");
+            if (host_ip == null || host_ip == "localhost")
+            {
+                bool runningInContainer = Environment.GetEnvironmentVariable("__STANDALONE_TESTING__") == null;
+                if (runningInContainer)
+                {
+                    // running in a container outside of Service Fabric or 
+                    // running in a container on local dev cluster
+                    host_ip = GetInternalGatewayAddress();
+                }
+                else
+                {
+                    // running outside of Service Fabric or 
+                    // running on local dev cluster
+                    host_ip = GetIpAddress();
+                }
+            }
+            var port = Environment.GetEnvironmentVariable("ManagementPort");
+            if (port != null)
+            {
+                management_port = port;
+            }
+
+            client_cert_subject_name = Environment.GetEnvironmentVariable("SF_ClientCertCommonName");
+            var issuer_thumbprints = Environment.GetEnvironmentVariable("SF_ClientCertIssuerThumbprints");
+            if (issuer_thumbprints != null)
+            {
+                client_cert_issuer_thumbprints = issuer_thumbprints.Split(',');
+            }
+            var server_common_names = Environment.GetEnvironmentVariable("SF_ClusterCertCommonNames");
+            if (server_common_names != null)
+            {
+                server_cert_common_names = server_common_names.Split(',');
+            }
+            var server_issuer_thumbprints = Environment.GetEnvironmentVariable("SF_ClusterCertIssuerThumbprints");
+            if (server_issuer_thumbprints != null)
+            {
+                server_cert_issuer_thumbprints = server_issuer_thumbprints.Split(',');
+            }
+
+            LogMessage(String.Format("Management Endpoint={0}:{1}", host_ip, management_port));
+            if (client_cert_subject_name != null)
+            {
+                LogMessage(String.Format("SF_ClientCertCommonName={0}", client_cert_subject_name));
+            }
+            if (issuer_thumbprints != null)
+            {
+                LogMessage(String.Format("SF_ClientCertIssuerThumbprints={0}", issuer_thumbprints));
+            }
+            if (server_cert_common_names != null)
+            {
+                LogMessage(String.Format("SF_ClusterCertCommonNames={0}", server_cert_common_names));
+            }
+            if (server_issuer_thumbprints != null)
+            {
+                LogMessage(String.Format("SF_ClusterCertIssuerThumbprints={0}", server_issuer_thumbprints));
+            }
+        }
+        private static string GetInternalGatewayAddress()
+        {
+            foreach (NetworkInterface networkInterface in NetworkInterface.GetAllNetworkInterfaces())
+            {
+                if (networkInterface.GetIPProperties().GatewayAddresses != null &&
+                    networkInterface.GetIPProperties().GatewayAddresses.Count > 0)
+                {
+                    foreach (GatewayIPAddressInformation gatewayAddr in networkInterface.GetIPProperties().GatewayAddresses)
+                    {
+                        if (gatewayAddr.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+                        {
+                            return gatewayAddr.Address.ToString();
+                        }
+                    }
+                }
+            }
+            throw new ArgumentNullException("internalgatewayaddress");
+        }
+
+        private static string GetIpAddress()
+        {
+            var hostname = Dns.GetHostName();
+            IPHostEntry hostEntry = Dns.GetHostEntry(Dns.GetHostName());
+            IPAddress ipAddress = hostEntry.AddressList.FirstOrDefault(
+                ip =>
+                    (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork));
+            if (ipAddress != null)
+            {
+                return ipAddress.ToString();
+            }
+            throw new InvalidOperationException("HostIpAddress");
+        }
+
+        public static string LocalHostFixup(string host)
+        {
+            if (host == null || host == "localhost")
+            {
+                return host_ip;
+            }
+            return host;
+        }
+
+        public static int connect_timeout_ms = 5000;
+
+        public static int timeout_ms = 120000;
+
+        public static List<string> response_headers_to_remove = new List<string>();
+
+        public static string verify_certificate_hash;
+
+        public static List<string> verify_subject_alt_name = new List<string>();
+
+        public static cluster_ssl_context cluster_ssl_context;
+
+        public static string host_ip;
+
+        public static string management_port = "19000";
+
+        public static string client_cert_subject_name;
+
+        public static string[] client_cert_issuer_thumbprints;
+
+        public static string[] server_cert_common_names;
+
+        public static string[] server_cert_issuer_thumbprints;
+    }
+    public class EnvoyClustersInformation
+    {
+        public EnvoyClustersInformation(string name, List<EnvoyRouteModel> routes, List<EnvoyHostModel> hosts, bool isHttps = false)
+        {
+            cluster = new EnvoyClusterModel(name, isHttps);
+            this.routes = routes;
+            this.hosts = hosts;
+        }
+
+        [JsonProperty]
+        public EnvoyClusterModel cluster;
+
+        [JsonProperty]
+        public List<EnvoyRouteModel> routes;
+
+        [JsonProperty]
+        public List<EnvoyHostModel> hosts;
+    }
+
+    public class EnvoyClusterModel
+    {
+        public EnvoyClusterModel(string name, bool isHttps = false)
+        {
+            this.name = name;
+            this.service_name = name;
+            if (isHttps)
+            {
+                ssl_context = EnvoyDefaults.cluster_ssl_context;
+            }
+        }
+
+        [JsonProperty]
+        public string name;
+
+        [JsonProperty]
+        public string service_name;
+
+        [JsonProperty]
+        public string type = "sds";
+
+        [JsonProperty]
+        public int connect_timeout_ms = EnvoyDefaults.connect_timeout_ms;
+
+        [JsonProperty]
+        public string lb_type = "round_robin";
+
+        [JsonProperty]
+        public EnvoyOutlierDetectionDataModel outlier_detection = EnvoyOutlierDetectionDataModel.defaultValue;
+
+        [JsonProperty]
+        public cluster_ssl_context ssl_context;
+        public bool ShouldSerializessl_context()
+        {
+            return (ssl_context != null);
+        }
+    }
+
+    public class EnvoyRouteModel
+    {
+        public EnvoyRouteModel(string cluster, string prefix, string prefix_rewrite, List<JObject> headers)
+        {
+            this.cluster = cluster;
+            this.prefix = prefix;
+            this.prefix_rewrite = prefix_rewrite;
+            if (!prefix.EndsWith("/"))
+            {
+                this.prefix += "/";
+            }
+            if (!prefix_rewrite.EndsWith("/"))
+            {
+                this.prefix_rewrite += "/";
+            }
+            this.headers = headers;
+        }
+
+        [JsonProperty]
+        public string cluster;
+
+        [JsonProperty]
+        public string prefix;
+
+        [JsonProperty]
+        public string prefix_rewrite;
+
+        [JsonProperty]
+        public List<JObject> headers;
+        public bool ShouldSerializeheaders()
+        {
+            return headers != null && headers.Count != 0;
+        }
+
+        [JsonProperty]
+        public int timeout_ms = EnvoyDefaults.timeout_ms;
+
+        [JsonProperty]
+        public EnvoyRetryPolicyModel retry_policy = EnvoyRetryPolicyModel.defaultValue;
+    }
+
+    public class EnvoyHostModel
+    {
+        public EnvoyHostModel(string ip_address, int port)
+        {
+            this.ip_address = EnvoyDefaults.LocalHostFixup(ip_address);
+            this.port = port;
+        }
+
+        [JsonProperty]
+        public string ip_address;
+
+        [JsonProperty]
+        public int port;
+
+        [JsonProperty]
+        public EnvoyHostTagsModel tags = EnvoyHostTagsModel.defaultValue;
+    }
+
+    public class EnvoyHostTagsModel
+    {
+        [JsonProperty]
+        public string az = "";
+
+        [JsonProperty]
+        public bool canary = false;
+
+        [JsonProperty]
+        public int load_balancing_weight = 100;
+
+        public static EnvoyHostTagsModel defaultValue = new EnvoyHostTagsModel();
+    }
+
+    public class EnvoyRetryPolicyModel
+    {
+        [JsonProperty]
+        public string retry_on = "5xx, connect-failure";
+
+        [JsonProperty]
+        public int num_retries = 5;
+
+        public static EnvoyRetryPolicyModel defaultValue = new EnvoyRetryPolicyModel();
+    }
+
+    public class EnvoyOutlierDetectionDataModel
+    {
+        [JsonProperty]
+        public int consecutive_5xx = 3;
+
+        static public EnvoyOutlierDetectionDataModel defaultValue = new EnvoyOutlierDetectionDataModel();
+    }
+
+    public class SF_Endpoint
+    {
+        public SF_Endpoint(ServiceEndpointRole role, Uri uri)
+        {
+            role_ = role;
+            endpoint_ = uri;
+        }
+
+        [JsonProperty(PropertyName = "role")]
+        public ServiceEndpointRole role_;
+
+        [JsonProperty(PropertyName = "endpoint")]
+        public Uri endpoint_;
+    }
+    public class SF_Partition
+    {
+        public SF_Partition(Uri serviceName, ServiceKind serviceKind, ServicePartitionInformation partitionInformation, ServiceEndpointsVersion version, Dictionary<string, List<SF_Endpoint>> listeners)
+        {
+            serviceName_ = serviceName;
+            serviceKind_ = serviceKind;
+            partitionInformation_ = partitionInformation;
+            version_ = version;
+            listeners_ = listeners;
+        }
+
+        [JsonProperty(PropertyName = "service_name")]
+        public Uri serviceName_;
+
+        [JsonProperty(PropertyName = "service_kind")]
+        public ServiceKind serviceKind_;
+
+        [JsonProperty(PropertyName = "partition_information")]
+        public ServicePartitionInformation partitionInformation_;
+
+        [JsonProperty(PropertyName = "version")]
+        public ServiceEndpointsVersion version_;
+
+        [JsonProperty(PropertyName = "listeners")]
+        public Dictionary<string, List<SF_Endpoint>> listeners_;
+    }
+
+    public class SF_Services
+    {
+        public static Dictionary<Guid, SF_Partition> partitions_;
+
+        // Temporary lists to handle initialization race
+        static Dictionary<Guid, SF_Partition> partitionsAdd_ = new Dictionary<Guid, SF_Partition>();
+
+        static Dictionary<Guid, SF_Partition> partitionsRemove_ = new Dictionary<Guid, SF_Partition>();
+
+        static object lock_ = new object();
+
+        static private FabricClient client;
+        static SF_Services()
+        {
+
+            try
+            {
+                partitions_ = null;
+
+                if (EnvoyDefaults.client_cert_subject_name != null)
+                {
+                    X509Credentials creds = new X509Credentials();
+                    creds.FindType = X509FindType.FindBySubjectName;
+                    creds.FindValue = EnvoyDefaults.client_cert_subject_name;
+                    if (EnvoyDefaults.client_cert_issuer_thumbprints != null)
+                    {
+                        foreach (var issuer in EnvoyDefaults.client_cert_issuer_thumbprints)
+                        {
+                            creds.IssuerThumbprints.Add(issuer);
+                        }
+                    }
+                    if (EnvoyDefaults.server_cert_common_names != null)
+                    {
+                        foreach (var commonName in EnvoyDefaults.server_cert_common_names)
+                        {
+                            creds.RemoteCommonNames.Add(commonName);
+                        }
+                    }
+                    else
+                    {
+                        creds.RemoteCommonNames.Add(EnvoyDefaults.client_cert_subject_name);
+                    }
+                    if (EnvoyDefaults.server_cert_issuer_thumbprints != null)
+                    {
+                        foreach (var issuer in EnvoyDefaults.server_cert_issuer_thumbprints)
+                        {
+                            creds.RemoteCertThumbprints.Add(issuer);
+                        }
+                    }
+                    else if (EnvoyDefaults.client_cert_issuer_thumbprints != null)
+                    {
+                        foreach (var issuer in EnvoyDefaults.client_cert_issuer_thumbprints)
+                        {
+                            creds.RemoteCertThumbprints.Add(issuer);
+                        }
+                    }
+                    creds.StoreLocation = StoreLocation.LocalMachine;
+                    creds.StoreName = "/app/sfcerts";
+
+                    client = new FabricClient(creds, new string[] { EnvoyDefaults.host_ip + ":" + EnvoyDefaults.management_port });
+
+                }
+                else
+                {
+                    client = new FabricClient(new string[] { EnvoyDefaults.host_ip + ":" + EnvoyDefaults.management_port });
+                }
+
+                EnableResolveNotifications.RegisterNotificationFilter("fabric:", client, Handler);
+            }
+            catch (Exception e)
+            {
+                EnvoyDefaults.LogMessage(String.Format("Error={0}", e));
+            }
+        }
+
+        private static void Handler(Object sender, EventArgs eargs)
+        {
+            try
+            {
+                var notification = ((FabricClient.ServiceManagementClient.ServiceNotificationEventArgs)eargs).Notification;
+                if (notification.Endpoints.Count == 0)
+                {
+                    //remove
+                    lock (lock_)
+                    {
+                        if (partitions_ != null)
+                        {
+                            partitions_.Remove(notification.PartitionId);
+                        }
+                        else
+                        {
+                            partitionsAdd_.Remove(notification.PartitionId);
+                            partitionsRemove_[notification.PartitionId] = null;
+                        }
+                        EnvoyDefaults.LogMessage(String.Format("Removed: {0}", notification.PartitionId));
+
+                        return;
+                    }
+                }
+
+                Dictionary<string, List<SF_Endpoint>> listeners = new Dictionary<string, List<SF_Endpoint>>();
+                ServiceEndpointRole role = ServiceEndpointRole.Invalid;
+                foreach (var notificationEndpoint in notification.Endpoints)
+                {
+                    if (notificationEndpoint.Address.Length == 0)
+                    {
+                        continue;
+                    }
+                    JObject addresses;
+                    try
+                    {
+                        addresses = JObject.Parse(notificationEndpoint.Address);
+                    }
+                    catch
+                    {
+                        continue;
+                    }
+
+                    var notificationListeners = addresses["Endpoints"].Value<JObject>();
+                    foreach (var notificationListener in notificationListeners)
+                    {
+                        if (!listeners.ContainsKey(notificationListener.Key))
+                        {
+                            listeners.Add(notificationListener.Key, new List<SF_Endpoint>());
+                        }
+                        try
+                        {
+                            var listenerAddressString = notificationListener.Value.ToString();
+                            if (!listenerAddressString.StartsWith("http") &&
+                                !listenerAddressString.StartsWith("https"))
+                            {
+                                continue;
+                            }
+                            var listenerAddress = new Uri(listenerAddressString);
+                            listeners[notificationListener.Key].Add(new SF_Endpoint(notificationEndpoint.Role, listenerAddress));
+                        }
+                        catch (System.Exception e)
+                        {
+                            EnvoyDefaults.LogMessage(String.Format("Error={0}", e));
+                        }
+                    }
+                    if (role == ServiceEndpointRole.Invalid)
+                    {
+                        role = notificationEndpoint.Role;
+                    }
+                }
+
+                // Remove any listeners without active endpoints
+                List<string> listenersToRemove = new List<string>();
+                foreach (var listener in listeners)
+                {
+                    if (listener.Value.Count == 0)
+                    {
+                        listenersToRemove.Add(listener.Key);
+                    }
+                }
+
+                foreach (var listener in listenersToRemove)
+                {
+                    listeners.Remove(listener);
+                }
+
+                // sort list of endpoints for each listener by its Uri. Tries to keep the index for secondaries stable when nothing changes
+                foreach (var listener in listeners)
+                {
+                    listener.Value.Sort(delegate (SF_Endpoint a, SF_Endpoint b)
+                    {
+                        if (a.role_ == ServiceEndpointRole.StatefulPrimary)
+                        {
+                            return -1;
+                        }
+                        return Uri.Compare(a.endpoint_, b.endpoint_, UriComponents.AbsoluteUri, UriFormat.Unescaped, StringComparison.InvariantCulture);
+                    });
+                }
+
+                if (listeners.Count == 0)
+                {
+                    return;
+                }
+
+                var partitionInfo = new SF_Partition(notification.ServiceName,
+                    (role == ServiceEndpointRole.Stateless) ? ServiceKind.Stateless : ServiceKind.Stateful,
+                    notification.PartitionInfo,
+                    notification.Version,
+                    listeners
+                    );
+
+                lock (lock_)
+                {
+                    if (partitions_ != null)
+                    {
+                        partitions_[notification.PartitionId] = partitionInfo;
+                    }
+                    else
+                    {
+                        partitionsRemove_.Remove(notification.PartitionId);
+                        partitionsAdd_[notification.PartitionId] = partitionInfo;
+                    }
+                    EnvoyDefaults.LogMessage(String.Format("Added: {0}={1}", notification.PartitionId,
+                        JsonConvert.SerializeObject(partitionInfo)));
+                }
+            }
+            catch (Exception e)
+            {
+                EnvoyDefaults.LogMessage(String.Format("Error={0}", e.Message));
+                EnvoyDefaults.LogMessage(String.Format("Error={0}", e.StackTrace));
+            }
+        }
+
+        /// <summary>
+        /// This function gathers the state of the cluster on startup and caches the information
+        /// Changes to cluster state are handled through notifications.
+        /// 
+        /// Capture information for each replica for every service running in the cluster.
+        /// </summary>
+        /// <returns></returns>
+        public static async Task InitializePartitionData()
+        {
+            // Populate data locally
+            Dictionary<Guid, SF_Partition> partitionData = new Dictionary<Guid, SF_Partition>();
+
+            var queryManager = client.QueryManager;
+
+            var applications = await queryManager.GetApplicationListAsync();
+            foreach (var application in applications)
+            {
+                var services = await queryManager.GetServiceListAsync(application.ApplicationName);
+                foreach (var service in services)
+                {
+                    var partitions = await queryManager.GetPartitionListAsync(service.ServiceName);
+                    foreach (var partition in partitions)
+                    {
+                        if (service.ServiceKind == ServiceKind.Stateful && partition.PartitionInformation.Kind != ServicePartitionKind.Int64Range)
+                        {
+                            continue;
+                        }
+
+                        Dictionary<string, List<SF_Endpoint>> listeners = new Dictionary<string, List<SF_Endpoint>>();
+
+                        var replicas = await queryManager.GetReplicaListAsync(partition.PartitionInformation.Id);
+                        foreach (var replica in replicas)
+                        {
+                            if (replica.ReplicaAddress.Length == 0)
+                            {
+                                continue;
+                            }
+                            JObject addresses;
+                            try
+                            {
+                                addresses = JObject.Parse(replica.ReplicaAddress);
+                            }
+                            catch
+                            {
+                                continue;
+                            }
+
+                            var replicaListeners = addresses["Endpoints"].Value<JObject>();
+                            foreach (var replicaListener in replicaListeners)
+                            {
+                                var role = ServiceEndpointRole.Stateless;
+                                if (partition.ServiceKind == ServiceKind.Stateful)
+                                {
+                                    var statefulRole = ((StatefulServiceReplica)replica).ReplicaRole;
+                                    switch (statefulRole)
+                                    {
+                                        case ReplicaRole.Primary:
+                                            role = ServiceEndpointRole.StatefulPrimary;
+                                            break;
+                                        case ReplicaRole.ActiveSecondary:
+                                            role = ServiceEndpointRole.StatefulSecondary;
+                                            break;
+                                        default:
+                                            role = ServiceEndpointRole.Invalid;
+                                            break;
+                                    }
+                                }
+                                if (!listeners.ContainsKey(replicaListener.Key))
+                                {
+                                    listeners[replicaListener.Key] = new List<SF_Endpoint>();
+                                }
+                                try
+                                {
+                                    var listenerAddressString = replicaListener.Value.ToString();
+                                    if (!listenerAddressString.StartsWith("http") &&
+                                        !listenerAddressString.StartsWith("https"))
+                                    {
+                                        continue;
+                                    }
+                                    var listenerAddress = new Uri(replicaListener.Value.ToString());
+                                    listeners[replicaListener.Key].Add(new SF_Endpoint(role, listenerAddress));
+                                }
+                                catch (System.Exception e)
+                                {
+                                    EnvoyDefaults.LogMessage(String.Format("Error={0}", e));
+                                }
+                            }
+                        }
+
+                        // Remove any listeners without active endpoints
+                        List<string> listenersToRemove = new List<string>();
+                        foreach (var listener in listeners)
+                        {
+                            if (listener.Value.Count == 0)
+                            {
+                                listenersToRemove.Add(listener.Key);
+                            }
+                        }
+
+                        foreach (var listener in listenersToRemove)
+                        {
+                            listeners.Remove(listener);
+                        }
+
+                        // sort list of endpoints for each listener by its Uri. Tries to keep the index for secondaries stable when nothing changes
+                        foreach (var listener in listeners)
+                        {
+                            listener.Value.Sort(delegate (SF_Endpoint a, SF_Endpoint b)
+                            {
+                                if (a.role_ == ServiceEndpointRole.StatefulPrimary)
+                                {
+                                    return -1;
+                                }
+                                return Uri.Compare(a.endpoint_, b.endpoint_, UriComponents.AbsoluteUri, UriFormat.Unescaped, StringComparison.InvariantCulture);
+                            });
+                        }
+
+                        if (listeners.Count == 0)
+                        {
+                            continue;
+                        }
+
+                        var partitionInfo = new SF_Partition(service.ServiceName,
+                            service.ServiceKind,
+                            partition.PartitionInformation,
+                            null,
+                            listeners);
+
+                        partitionData[partition.PartitionInformation.Id] = partitionInfo;
+                    }
+                }
+            }
+
+            // Process changes received through notifications
+            lock (lock_)
+            {
+                foreach (var partition in partitionsAdd_)
+                {
+                    partitionData[partition.Key] = partition.Value;
+                }
+                foreach (var partition in partitionsRemove_)
+                {
+                    partitionData.Remove(partition.Key);
+                }
+
+                // Finally update global state
+                partitions_ = partitionData;
+                foreach (var partition in partitionData)
+                {
+                    EnvoyDefaults.LogMessage(String.Format("Added: {0}={1}", partition.Key,
+                        JsonConvert.SerializeObject(partition.Value)));
+                }
+
+                partitionsRemove_ = null;
+                partitionsAdd_ = null;
+            }
+        }
+
+        public static List<EnvoyClustersInformation> EnvoyInformationForPartition(Guid partitionId)
+        {
+            lock (lock_)
+            {
+                List<EnvoyClustersInformation> ret = new List<EnvoyClustersInformation>();
+                if (partitions_ == null)
+                {
+                    return ret;
+                }
+
+                SF_Partition partition;
+                if (!partitions_.TryGetValue(partitionId, out partition))
+                {
+                    return ret;
+                }
+
+                //List<RouteData> ret = new List<RouteData>();
+                // stateless - partitionId | endpoint Index | -1
+                // stateful - partitionId | endpoint Index | replica Index
+                var keys = new List<string>(partition.listeners_.Keys);
+                keys.Sort();
+
+                string prefix = partition.serviceName_.AbsolutePath;
+                if (!prefix.EndsWith("/"))
+                {
+                    prefix += "/";
+                }
+                for (int endpointIndex = 0; endpointIndex < keys.Count(); endpointIndex++)
+                {
+                    var ep = partition.listeners_[keys[endpointIndex]];
+                    List<int> replicaIndexes;
+                    bool statefulPartition = false;
+                    if (partition.serviceKind_ == ServiceKind.Stateless)
+                    {
+                        // For stateless, path is same for all replicas so we need to iterate just once
+                        replicaIndexes = new List<int>() { -1 };
+                    }
+                    else
+                    {
+                        replicaIndexes = new List<int>();
+                        replicaIndexes.AddRange(Enumerable.Range(0, ep.Count()));
+                        statefulPartition = true;
+                    }
+                    JObject endpointHeader = null;
+                    if (keys[endpointIndex] != "")
+                    {
+                        endpointHeader = new JObject();
+                        endpointHeader.Add("name", "ListenerName");
+                        endpointHeader.Add("value", keys[endpointIndex]);
+                    }
+                    for (int index = 0; index < replicaIndexes.Count; index++)
+                    {
+                        List<EnvoyRouteModel> routeData = new List<EnvoyRouteModel>();
+                        List<EnvoyHostModel> hostData = new List<EnvoyHostModel>();
+                        string cluster = partitionId.ToString() + "|" + endpointIndex.ToString() + "|" + replicaIndexes[index].ToString();
+                        string prefix_rewrite = ep[index].endpoint_.AbsolutePath;
+                        List<JObject> headers = new List<JObject>();
+                        if (endpointHeader != null)
+                        {
+                            headers.Add(endpointHeader);
+                        }
+                        if (ep[index].role_ == ServiceEndpointRole.StatefulSecondary)
+                        {
+                            JObject statefulSecondaryIndex = new JObject();
+                            statefulSecondaryIndex.Add("name", "SecondaryReplicaIndex");
+                            statefulSecondaryIndex.Add("value", replicaIndexes[index]);
+                            headers.Add(statefulSecondaryIndex);
+                        }
+                        if (statefulPartition)
+                        {
+                            hostData.Add(new EnvoyHostModel(ep[index].endpoint_.Host, ep[index].endpoint_.Port));
+                            var rangePartitionInformation = (Int64RangePartitionInformation)partition.partitionInformation_;
+                            if (rangePartitionInformation.LowKey == Int64.MinValue &&
+                                rangePartitionInformation.HighKey == Int64.MaxValue)
+                            {
+                                routeData.Add(new EnvoyRouteModel(cluster, prefix, prefix_rewrite, headers));
+                            }
+                            else
+                            {
+                                if (rangePartitionInformation.HighKey - rangePartitionInformation.LowKey > 128)
+                                {
+                                    continue;
+                                }
+                                for (long partitionKey = rangePartitionInformation.LowKey; partitionKey <= rangePartitionInformation.HighKey; partitionKey++)
+                                {
+                                    JObject partitionKeyHeader = new JObject();
+                                    partitionKeyHeader.Add("name", "PartitionKey");
+                                    partitionKeyHeader.Add("value", partitionKey);
+
+                                    List<JObject> keyHeaders = new List<JObject>(headers);
+                                    keyHeaders.Add(partitionKeyHeader);
+                                    routeData.Add(new EnvoyRouteModel(cluster, prefix, prefix_rewrite, keyHeaders));
+                                }
+                            }
+                        }
+                        else
+                        {
+                            // For stateless, capture addresses for all listeners for the one route
+                            foreach (var address in ep)
+                            {
+                                hostData.Add(new EnvoyHostModel(address.endpoint_.Host, address.endpoint_.Port));
+                            }
+                            routeData.Add(new EnvoyRouteModel(cluster, prefix, prefix_rewrite, headers));
+                        }
+                        if (ep[index].endpoint_.Scheme == "https")
+                        {
+                            if (EnvoyDefaults.cluster_ssl_context != null)
+                            {
+                                ret.Add(new EnvoyClustersInformation(cluster, routeData, hostData, true));
+                            }
+                            else
+                            {
+                                // Log information indicating that this end point is skipped
+                            }
+                        }
+                        else
+                        {
+                            ret.Add(new EnvoyClustersInformation(cluster, routeData, hostData, false));
+                        }
+                    }
+                }
+                return ret;
+            }
+        }
+    }
+}
