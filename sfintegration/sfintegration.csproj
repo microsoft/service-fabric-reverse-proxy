@@ -18,4 +18,11 @@
     <PackageReference Include="Microsoft.ServiceFabric.Services" Version="3.0.211-preview" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="config.json" CopyToPublishDirectory="Always" />  
+    <None Include="config.secure.json" CopyToPublishDirectory="Always" />  
+    <None Include="Dockerfile" CopyToPublishDirectory="Always" />  
+    <None Include="startup.sh" CopyToPublishDirectory="Always" />  
+  </ItemGroup>
+
 </Project>
