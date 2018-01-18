@@ -170,17 +170,17 @@ All logs from reverse proxy are stored in /var/log/sfreverseproxy folder in the 
 
 ```json 
 {
-    "properties": {
-        "publisher": "Microsoft.OSTCExtensions",
-        "type": "LinuxDiagnostic",
-        "typeHandlerVersion": "2.3",
-        "autoUpgradeMinorVersion": true,
-        "settings": {
-            "xmlCfg": "",
-            "StorageAccount": "<accountname>"
-        }
-    },
-    "name": "<NodeType>"
+    "properties": {
+        "publisher": "Microsoft.OSTCExtensions",
+        "type": "LinuxDiagnostic",
+        "typeHandlerVersion": "2.3",
+        "autoUpgradeMinorVersion": true,
+        "settings": {
+            "xmlCfg": "",
+            "StorageAccount": "<accountname>"
+        }
+    },
+    "name": "<NodeType>"
 }
 ```
 2. Create new storage account (It is recommended).
@@ -195,33 +195,33 @@ az storage account generate-sas --account-name newstorageaccountname --expiry 99
 
 ```json
 {
-    "properties": {
-        "publisher": "Microsoft.Azure.Diagnostics",
-        "type": "LinuxDiagnostic",
-        "typeHandlerVersion": "3.0",
-        "autoUpgradeMinorVersion": true,
-        "settings": {
-            "StorageAccount": "<newaccountname>",
-            "fileLogs": [
-                {
-                    "file": "/var/log/sfreverseproxy/stdout.log",
-                    "table": "SFReverseProxyDebugLog",
-                    "sinks": ""
-                },
-                {
-                    "file": "/var/log/sfreverseproxy/request.log",
-                    "table": "SFReverseProxyRequestLog",
-                    "sinks": ""
-                }
-            ],
-            "ladCfg":""
-        },
-        "protectedSettings": {
-            "storageAccountName": "<newaccountname>",
-            "storageAccountSasToken": "<newaccount SAS token>"
-        }
-    },
-    "name": "<NodeType>"
+    "properties": {
+        "publisher": "Microsoft.Azure.Diagnostics",
+        "type": "LinuxDiagnostic",
+        "typeHandlerVersion": "3.0",
+        "autoUpgradeMinorVersion": true,
+        "settings": {
+            "StorageAccount": "<newaccountname>",
+            "fileLogs": [
+                {
+                    "file": "/var/log/sfreverseproxy/stdout.log",
+                    "table": "SFReverseProxyDebugLog",
+                    "sinks": ""
+                },
+                {
+                    "file": "/var/log/sfreverseproxy/request.log",
+                    "table": "SFReverseProxyRequestLog",
+                    "sinks": ""
+                }
+            ],
+            "ladCfg": ""
+        },
+        "protectedSettings": {
+            "storageAccountName": "<newaccountname>",
+            "storageAccountSasToken": "<newaccount SAS token>"
+        }
+    },
+    "name": "<NodeType>"
 }
 ```
 5. The logs will be visible under the configured table name.
