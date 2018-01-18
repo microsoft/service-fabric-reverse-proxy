@@ -4,6 +4,10 @@ dist: xenial
 sudo: required
 mono: none
 dotnet: 2.1.4
+branches:
+  only:
+  - master
+  - sridmad
 install:
   - export DOTNET_CLI_TELEMETRY_OPTOUT=1
 before_script:
