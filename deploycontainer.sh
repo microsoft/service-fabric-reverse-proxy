@@ -30,9 +30,8 @@ echo docker tag $BRANCH/service-fabric-reverse-proxy:$TAG $BRANCH/service-fabric
 docker tag $BRANCH/service-fabric-reverse-proxy:$TAG $BRANCH/service-fabric-reverse-proxy:latest
 
 # Login to Docker Hub and upload images
-echo docker login -u="$DOCKER_USERNAME" -p="$DOCKER_PASSWORD"
-echo docker login -u="$DOCKER_USERNAME" -p="$DOCKER_PASSWORD"
+docker login -u="$DOCKER_USERNAME" -p="$DOCKER_PASSWORD"
 echo docker push $BRANCH/service-fabric-reverse-proxy:$TAG
-echo docker push $BRANCH/service-fabric-reverse-proxy:$TAG
+docker push $BRANCH/service-fabric-reverse-proxy:$TAG
 echo docker push $BRANCH/service-fabric-reverse-proxy:latest
-echo docker push $BRANCH/service-fabric-reverse-proxy:latest
+docker push $BRANCH/service-fabric-reverse-proxy:latest

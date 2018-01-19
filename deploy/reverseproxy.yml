@@ -3,9 +3,10 @@ services:
   Reverse_Proxy_Service:
     deploy:
       replicas: -1
-    image: sridmad/reverseproxyimage:0.1.0
+    image: sridmad/service-fabric-reverse-proxy:0.1.0
     volumes:
     - /var/lib/sfcerts:/app/sfcerts
+    - /var/log/sfreverseproxy:/var/log/sfreverseproxy
     environment:
       # Secure cluster settings
       # - SF_ClientCertCommonName=
