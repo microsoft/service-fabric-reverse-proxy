@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>netcoreapp2.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Folder Include="wwwroot\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.ApplicationInsights.AspNetCore" Version="2.1.1" />
+    <PackageReference Include="Microsoft.AspNetCore.All" Version="2.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <DotNetCliToolReference Include="Microsoft.VisualStudio.Web.CodeGeneration.Tools" Version="2.0.0" />
+    <PackageReference Include="Microsoft.ServiceFabric.Services" Version="3.0.211-preview" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="config.json" CopyToPublishDirectory="Always" />  
+    <None Include="config.secure.json" CopyToPublishDirectory="Always" />  
+    <None Include="Dockerfile" CopyToPublishDirectory="Always" />  
+    <None Include="startup.sh" CopyToPublishDirectory="Always" />  
+  </ItemGroup>
+
+</Project>
