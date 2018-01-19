@@ -15,6 +15,8 @@ echo BRANCH=$BRANCH
 echo DOCKER_USERNAME=$DOCKER_USERNAME
 echo DOCKER_PASSWORD=$DOCKER_PASSWORD
 
+echo dotnet build -c Release sfintegration
+dotnet build -c Release sfintegration
 echo dotnet publish -c Release sfintegration
 dotnet publish -c Release sfintegration
 

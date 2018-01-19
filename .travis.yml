@@ -12,10 +12,4 @@ install:
 before_script:
   - chmod a+x ./deploycontainer.sh
 script:
-  - dotnet build -c Release sfintegration
-deploy:
-  - provider: script
-    script: ./deploycontainer.sh $TRAVIS_TAG $TRAVIS_BRANCH $DOCKER_USERNAME $DOCKER_PASSWORD
-    skip_cleanup: true
-    on:
-      tags: true
+  - ./deploycontainer.sh $TRAVIS_TAG $TRAVIS_BRANCH $DOCKER_USERNAME $DOCKER_PASSWORD
