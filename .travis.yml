@@ -1,4 +1,6 @@
 language: csharp
+services:
+  - docker
 os: linux
 sudo: required
 mono: none
@@ -12,4 +14,4 @@ install:
 before_script:
   - chmod a+x ./deploycontainer.sh
 script:
-  - ./deploycontainer.sh $TRAVIS_TAG $TRAVIS_BRANCH $DOCKER_USERNAME $DOCKER_PASSWORD
+  - ./deploycontainer.sh $TRAVIS_BRANCH $DOCKER_USERNAME $DOCKER_PASSWORD $TRAVIS_TAG
