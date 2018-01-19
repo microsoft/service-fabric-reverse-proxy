@@ -104,17 +104,17 @@ By default, the Docker Compose file has the following settings.
 
 +   Connect to Service Fabric Cluster
 
-    +   Sfctl cluster select –endpoint &lt;endpoint of Service Fabric cluster&gt;
+    +   sfctl cluster select –endpoint &lt;endpoint of Service Fabric cluster&gt;
 
 +   Download and modify Docker Compose file
 
 +   Deploy Reverse Proxy to Cluster
 
-    +   Sfctl Compose create --deployment-name Reverse_Proxy_Application --file-path ./reverseproxy.yml
+    +   sfctl compose create --deployment-name Reverse_Proxy_Application --file-path ./reverseproxy.yml
 
 +   Remove Reverse Proxy from cluster
 
-    +   Sfctl Compose remove --deployment-name Reverse_Proxy_Application
+    +   sfctl compose remove --deployment-name Reverse_Proxy_Application
 
 ## Reverse Proxy URL Format and Headers
 Following is the general format of to use Reverse proxy to route requests to a service.
