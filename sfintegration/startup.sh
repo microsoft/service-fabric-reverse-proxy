@@ -1,5 +1,4 @@
 #!/bin/bash
-set -v
 
 # timestamp function
 timestamp() {
@@ -36,4 +35,4 @@ echo $(timestamp), startup.sh, Succeeded validate Envoy cofigfile, $config_file 
 
 
 /usr/local/bin/envoy -c ${config_file} --service-cluster ReverseProxy --service-node ${Fabric_NodeName} >> "${reverse_proxy_log_path}" 2>&1 &
-LD_LIBRARY_PATH=/opt/microsoft/servicefabric/bin/Fabric/Fabric.Code:. dotnet sfintegration.dll >> "${reverse_proxy_log_path}" 2>&1
+LD_LIBRARY_PATH=/opt/microsoft/servicefabric/bin/Fabric/Fabric.Code:. FabricPackageFileName= dotnet sfintegration.dll >> "${reverse_proxy_log_path}" 2>&1
