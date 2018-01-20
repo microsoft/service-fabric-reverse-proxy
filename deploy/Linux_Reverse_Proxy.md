@@ -164,7 +164,6 @@ Routing to partition that handles data with Partition Key == 1 and Listener name
 ## LAD 3.0 to collects logs
 All logs from reverse proxy are stored in /var/log/sfreverseproxy folder in the container.
 
-
  
 1. Perform an ARM template update to remove LAD 2.3: i.e Rremove following section from template if present and deploy. LAD 2.3 does not have the capability to upload files to storage. If LAD 2.3 is not installed, skip this step.
 
@@ -180,7 +179,7 @@ All logs from reverse proxy are stored in /var/log/sfreverseproxy folder in the 
             "StorageAccount": "<accountname>"
         }
     },
-    "name": "<NodeType>"
+    "name": "<VMDiagnosticsVmExt_Name>"
 }
 ```
 2. Create new storage account (It is recommended).
@@ -188,10 +187,12 @@ All logs from reverse proxy are stored in /var/log/sfreverseproxy folder in the 
 3. Generate SAS key for the new storage account using the following. Alternatively, this can also be generated through portal.
 
 ```bash
+az login 
+az account set --subscription <your_azure_subscription_id>
 az storage account generate-sas --account-name newstorageaccountname --expiry 9999-12-31T23:59Z --permissions wlacu --resource-types co --services bt -o tsv
 ```
 	
-4. Perform ARM template update to install LAD 3.0. LAD captures new text lines as they are written to the file and writes them to table rows and/or any specified sinks (JsonBlob or EventHub). Add following section to template and deploy:
+4. Perform ARM template update to install LAD 3.0. LAD captures new text lines as they are written to the file and writes them to table rows and/or any specified sinks (JsonBlob or EventHub). Add following section to template under the "extensionProfile" -> "extensions" section and deploy:
 
 ```json
 {
@@ -221,8 +222,9 @@ az storage account generate-sas --account-name newstorageaccountname --expiry 99
             "storageAccountSasToken": "<newaccount SAS token>"
         }
     },
-    "name": "<NodeType>"
+    "name": "<VMDiagnosticsVmExt_Name>"
 }
 ```
 5. The logs will be visible under the configured table name.
+ For more information about LAD, refer to [Linux Diagnostic Extension](https://docs.microsoft.com/en-us/azure/virtual-machines/linux/diagnostic-extension)
 
