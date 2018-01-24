@@ -1,19 +1,23 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using System.Fabric;
-using System.Fabric.Query;
-using Newtonsoft.Json.Linq;
-using ServiceFabric.Helpers;
-using Newtonsoft.Json;
-using System.IO;
-using System.Net.NetworkInformation;
-using System.Net;
-using System.Security.Cryptography.X509Certificates;
+﻿// ------------------------------------------------------------
+// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT license.
+// ------------------------------------------------------------
 
-namespace webapi
+namespace Microsoft.ServiceFabric.ReverseProxy
 {
+    using Newtonsoft.Json;
+    using Newtonsoft.Json.Linq;
+    using System;
+    using System.Collections.Generic;
+    using System.Fabric;
+    using System.Fabric.Query;
+    using System.IO;
+    using System.Linq;
+    using System.Net;
+    using System.Net.NetworkInformation;
+    using System.Security.Cryptography.X509Certificates;
+    using System.Threading.Tasks;
+
     public class cluster_ssl_context
     {
         static string ca_cert_file_path = "/var/lib/sfreverseproxycerts/servicecacert.pem";
@@ -236,6 +240,7 @@ namespace webapi
 
         public static string[] server_cert_issuer_thumbprints;
     }
+
     public class EnvoyClustersInformation
     {
         public EnvoyClustersInformation(string name, List<EnvoyRouteModel> routes, List<EnvoyHostModel> hosts, bool isHttps = false)
@@ -399,6 +404,7 @@ namespace webapi
         [JsonProperty(PropertyName = "endpoint")]
         public Uri endpoint_;
     }
+
     public class SF_Partition
     {
         public SF_Partition(Uri serviceName, ServiceKind serviceKind, ServicePartitionInformation partitionInformation, ServiceEndpointsVersion version, Dictionary<string, List<SF_Endpoint>> listeners)

@@ -1,14 +1,17 @@
-﻿using System;
-using System.Collections.Generic;
-using Microsoft.AspNetCore.Mvc;
-using System.Fabric;
-using ServiceFabric.Helpers;
+﻿// ------------------------------------------------------------
+// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT license.
+// ------------------------------------------------------------
 
-namespace webapi.Controllers
+namespace Microsoft.ServiceFabric.ReverseProxy.Controllers
 {
+    using Microsoft.AspNetCore.Mvc;
+    using System;
+    using System.Collections.Generic;
+
     [Produces("application/json")]
-    [Route("[controller]")]
-    public class v1 : Controller
+    [Route("v1")]
+    public class DiscoveryController : Controller
     {
         [HttpGet]
         public IActionResult GetAsync()
