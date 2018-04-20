@@ -492,8 +492,10 @@ namespace webapi
                 {
                     client = new FabricClient(new string[] { EnvoyDefaults.host_ip + ":" + EnvoyDefaults.management_port });
                 }
+                EnvoyDefaults.LogMessage("Client sucessfully created");
 
                 EnableResolveNotifications.RegisterNotificationFilter("fabric:", client, Handler);
+                EnvoyDefaults.LogMessage("Notification handler sucessfully set");
             }
             catch (Exception e)
             {
@@ -644,12 +646,26 @@ namespace webapi
         /// <returns></returns>
         public static async Task InitializePartitionData()
         {
+            EnvoyDefaults.LogMessage("InitializePartitionData started");
+
             // Populate data locally
             Dictionary<Guid, SF_Partition> partitionData = new Dictionary<Guid, SF_Partition>();
 
             var queryManager = client.QueryManager;
 
-            var applications = await queryManager.GetApplicationListAsync();
+            ApplicationList applications = null;
+            try
+            {
+                applications = await queryManager.GetApplicationListAsync();
+            }
+            catch (Exception e)
+            {
+                EnvoyDefaults.LogMessage("GetApplicationListAsync failed");
+                EnvoyDefaults.LogMessage(String.Format("Error={0}", e.Message));
+                EnvoyDefaults.LogMessage(String.Format("Error={0}", e.StackTrace));
+                Environment.FailFast("GetApplicationListAsync failed");
+            }
+            EnvoyDefaults.LogMessage("GetApplicationListAsync Succeeded");
             foreach (var application in applications)
             {
                 var services = await queryManager.GetServiceListAsync(application.ApplicationName);
