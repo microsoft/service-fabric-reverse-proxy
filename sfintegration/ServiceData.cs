@@ -11,6 +11,7 @@ using System.IO;
 using System.Net.NetworkInformation;
 using System.Net;
 using System.Security.Cryptography.X509Certificates;
+using System.Text;
 
 namespace webapi
 {
@@ -122,11 +123,15 @@ namespace webapi
                     // running in a container on local dev cluster
                     host_ip = GetInternalGatewayAddress();
                 }
-                else
+                else if (Environment.GetEnvironmentVariable("__USE_LOCALHOST__") == null)
                 {
                     // running outside of Service Fabric or 
                     // running on local dev cluster
                     host_ip = GetIpAddress();
+                }
+                else
+                {
+                    host_ip = "127.0.0.1";
                 }
             }
             var port = Environment.GetEnvironmentVariable("ManagementPort");
@@ -385,9 +390,9 @@ namespace webapi
         static public EnvoyOutlierDetectionDataModel defaultValue = new EnvoyOutlierDetectionDataModel();
     }
 
-    public class SF_Endpoint
+    public class SF_EndpointInstance
     {
-        public SF_Endpoint(ServiceEndpointRole role, Uri uri)
+        public SF_EndpointInstance(ServiceEndpointRole role, Uri uri)
         {
             role_ = role;
             endpoint_ = uri;
@@ -399,9 +404,46 @@ namespace webapi
         [JsonProperty(PropertyName = "endpoint")]
         public Uri endpoint_;
     }
+
+    public class SF_Endpoint
+    {
+        public SF_Endpoint(string name)
+        {
+            this.Name = name;
+        }
+
+        public void AddInstance(ServiceEndpointRole role, Uri uri)
+        {
+            if (instances == null)
+            {
+                instances = new List<SF_EndpointInstance>();
+            }
+            instances.Add(new SF_EndpointInstance(role, uri));
+        }
+
+        public int InstanceCount()
+        {
+            if (instances == null)
+            {
+                return 0;
+            }
+            return instances.Count;
+        }
+
+        public SF_EndpointInstance GetAt(int index)
+        {
+            return instances[index];
+        }
+
+        [JsonProperty]
+        public string Name;
+
+        [JsonProperty]
+        private List<SF_EndpointInstance> instances;
+    }
     public class SF_Partition
     {
-        public SF_Partition(Uri serviceName, ServiceKind serviceKind, ServicePartitionInformation partitionInformation, ServiceEndpointsVersion version, Dictionary<string, List<SF_Endpoint>> listeners)
+        public SF_Partition(Uri serviceName, ServiceKind serviceKind, ServicePartitionInformation partitionInformation, ServiceEndpointsVersion version, List<SF_Endpoint> listeners)
         {
             serviceName_ = serviceName;
             serviceKind_ = serviceKind;
@@ -423,12 +465,26 @@ namespace webapi
         public ServiceEndpointsVersion version_;
 
         [JsonProperty(PropertyName = "listeners")]
-        public Dictionary<string, List<SF_Endpoint>> listeners_;
+        public List<SF_Endpoint> listeners_;
+    }
+
+    public class ServicePartitions
+    {
+        [JsonProperty]
+        public int EndpointIndex;
+
+        [JsonProperty]
+        public bool StatefulService;
+
+        [JsonProperty]
+        public List<Guid> Partitions;
     }
 
     public class SF_Services
     {
         public static Dictionary<Guid, SF_Partition> partitions_;
+
+        public static Dictionary<string, ServicePartitions> services_;
 
         // Temporary lists to handle initialization race
         static Dictionary<Guid, SF_Partition> partitionsAdd_ = new Dictionary<Guid, SF_Partition>();
@@ -503,6 +559,18 @@ namespace webapi
             }
         }
 
+        private static string CalculateNameForService(SF_Partition partition, int listenerIndex)
+        {
+            StringBuilder serviceName = new StringBuilder(partition.serviceName_.PathAndQuery.Substring(1).Replace('/', '_'));
+            if (partition.listeners_[listenerIndex].Name != "")
+            {
+                serviceName.Append("_");
+                serviceName.Append(partition.listeners_[listenerIndex].Name);
+            }
+            serviceName.Append("|*|-2");
+
+            return serviceName.ToString();
+        }
         private static void Handler(Object sender, EventArgs eargs)
         {
             try
@@ -516,6 +584,17 @@ namespace webapi
                         if (partitions_ != null)
                         {
                             partitions_.Remove(notification.PartitionId);
+                            foreach (var service in services_)
+                            {
+                                foreach (var partition in service.Value.Partitions)
+                                {
+                                    if (partition == notification.PartitionId)
+                                    {
+                                        service.Value.Partitions.Remove(notification.PartitionId);
+                                        break;
+                                    }
+                                }
+                            }
                         }
                         else
                         {
@@ -528,7 +607,7 @@ namespace webapi
                     }
                 }
 
-                Dictionary<string, List<SF_Endpoint>> listeners = new Dictionary<string, List<SF_Endpoint>>();
+                List<SF_Endpoint> listeners = new List<SF_Endpoint>();
                 ServiceEndpointRole role = ServiceEndpointRole.Invalid;
                 foreach (var notificationEndpoint in notification.Endpoints)
                 {
@@ -549,9 +628,11 @@ namespace webapi
                     var notificationListeners = addresses["Endpoints"].Value<JObject>();
                     foreach (var notificationListener in notificationListeners)
                     {
-                        if (!listeners.ContainsKey(notificationListener.Key))
+                        int listenerIndex = listeners.FindIndex(x => x.Name == notificationListener.Key);
+                        if (listenerIndex == -1)
                         {
-                            listeners.Add(notificationListener.Key, new List<SF_Endpoint>());
+                            listeners.Add(new SF_Endpoint(notificationListener.Key));
+                            listenerIndex = listeners.Count - 1;
                         }
                         try
                         {
@@ -562,7 +643,7 @@ namespace webapi
                                 continue;
                             }
                             var listenerAddress = new Uri(listenerAddressString);
-                            listeners[notificationListener.Key].Add(new SF_Endpoint(notificationEndpoint.Role, listenerAddress));
+                            listeners[listenerIndex].AddInstance(notificationEndpoint.Role, listenerAddress);
                         }
                         catch (System.Exception e)
                         {
@@ -576,32 +657,7 @@ namespace webapi
                 }
 
                 // Remove any listeners without active endpoints
-                List<string> listenersToRemove = new List<string>();
-                foreach (var listener in listeners)
-                {
-                    if (listener.Value.Count == 0)
-                    {
-                        listenersToRemove.Add(listener.Key);
-                    }
-                }
-
-                foreach (var listener in listenersToRemove)
-                {
-                    listeners.Remove(listener);
-                }
-
-                // sort list of endpoints for each listener by its Uri. Tries to keep the index for secondaries stable when nothing changes
-                foreach (var listener in listeners)
-                {
-                    listener.Value.Sort(delegate (SF_Endpoint a, SF_Endpoint b)
-                    {
-                        if (a.role_ == ServiceEndpointRole.StatefulPrimary)
-                        {
-                            return -1;
-                        }
-                        return Uri.Compare(a.endpoint_, b.endpoint_, UriComponents.AbsoluteUri, UriFormat.Unescaped, StringComparison.InvariantCulture);
-                    });
-                }
+                listeners.RemoveAll(x => x.InstanceCount() == 0);
 
                 if (listeners.Count == 0)
                 {
@@ -620,6 +676,17 @@ namespace webapi
                     if (partitions_ != null)
                     {
                         partitions_[notification.PartitionId] = partitionInfo;
+                        for (int listenerIndex = 0; listenerIndex < partitionInfo.listeners_.Count; listenerIndex++)
+                        {
+                            string serviceName = CalculateNameForService(partitionInfo, listenerIndex);
+                            if (!services_.ContainsKey(serviceName))
+                            {
+                                services_[serviceName] = new ServicePartitions { EndpointIndex = listenerIndex, 
+                                    StatefulService = (partitionInfo.serviceKind_ == ServiceKind.Stateful),
+                                    Partitions = new List<Guid>() };
+                            }
+                            services_[serviceName].Partitions.Add(notification.PartitionId);
+                        }
                     }
                     else
                     {
@@ -674,12 +741,7 @@ namespace webapi
                     var partitions = await queryManager.GetPartitionListAsync(service.ServiceName);
                     foreach (var partition in partitions)
                     {
-                        if (service.ServiceKind == ServiceKind.Stateful && partition.PartitionInformation.Kind != ServicePartitionKind.Int64Range)
-                        {
-                            continue;
-                        }
-
-                        Dictionary<string, List<SF_Endpoint>> listeners = new Dictionary<string, List<SF_Endpoint>>();
+                        List<SF_Endpoint> listeners = new List<SF_Endpoint>();
 
                         var replicas = await queryManager.GetReplicaListAsync(partition.PartitionInformation.Id);
                         foreach (var replica in replicas)
@@ -718,9 +780,11 @@ namespace webapi
                                             break;
                                     }
                                 }
-                                if (!listeners.ContainsKey(replicaListener.Key))
+                                int listenerIndex = listeners.FindIndex(x => x.Name == replicaListener.Key);
+                                if (listenerIndex == -1)
                                 {
-                                    listeners[replicaListener.Key] = new List<SF_Endpoint>();
+                                    listeners.Add(new SF_Endpoint(replicaListener.Key));
+                                    listenerIndex = listeners.Count - 1;
                                 }
                                 try
                                 {
@@ -731,7 +795,7 @@ namespace webapi
                                         continue;
                                     }
                                     var listenerAddress = new Uri(replicaListener.Value.ToString());
-                                    listeners[replicaListener.Key].Add(new SF_Endpoint(role, listenerAddress));
+                                    listeners[listenerIndex].AddInstance(role, listenerAddress);
                                 }
                                 catch (System.Exception e)
                                 {
@@ -741,32 +805,7 @@ namespace webapi
                         }
 
                         // Remove any listeners without active endpoints
-                        List<string> listenersToRemove = new List<string>();
-                        foreach (var listener in listeners)
-                        {
-                            if (listener.Value.Count == 0)
-                            {
-                                listenersToRemove.Add(listener.Key);
-                            }
-                        }
-
-                        foreach (var listener in listenersToRemove)
-                        {
-                            listeners.Remove(listener);
-                        }
-
-                        // sort list of endpoints for each listener by its Uri. Tries to keep the index for secondaries stable when nothing changes
-                        foreach (var listener in listeners)
-                        {
-                            listener.Value.Sort(delegate (SF_Endpoint a, SF_Endpoint b)
-                            {
-                                if (a.role_ == ServiceEndpointRole.StatefulPrimary)
-                                {
-                                    return -1;
-                                }
-                                return Uri.Compare(a.endpoint_, b.endpoint_, UriComponents.AbsoluteUri, UriFormat.Unescaped, StringComparison.InvariantCulture);
-                            });
-                        }
+                        listeners.RemoveAll(x => x.InstanceCount() == 0);
 
                         if (listeners.Count == 0)
                         {
@@ -796,10 +835,22 @@ namespace webapi
                     partitionData.Remove(partition.Key);
                 }
 
-                // Finally update global state
+                // Finally update global state, populate Service List and log details
                 partitions_ = partitionData;
+                services_ = new Dictionary<string, ServicePartitions>();
                 foreach (var partition in partitionData)
                 {
+                    for (var index = 0; index < partition.Value.listeners_.Count; index++)
+                    {
+                        string serviceName = CalculateNameForService(partition.Value, index);
+                        if (!services_.ContainsKey(serviceName))
+                        {
+                            services_[serviceName] = new ServicePartitions { EndpointIndex = index,
+                                StatefulService = (partition.Value.serviceKind_ == ServiceKind.Stateful),
+                                Partitions = new List<Guid>() };
+                        }
+                        services_[serviceName].Partitions.Add(partition.Key);
+                    }
                     EnvoyDefaults.LogMessage(String.Format("Added: {0}={1}", partition.Key,
                         JsonConvert.SerializeObject(partition.Value)));
                 }
@@ -828,92 +879,120 @@ namespace webapi
                 //List<RouteData> ret = new List<RouteData>();
                 // stateless - partitionId | endpoint Index | -1
                 // stateful - partitionId | endpoint Index | replica Index
-                var keys = new List<string>(partition.listeners_.Keys);
-                keys.Sort();
-
                 string prefix = partition.serviceName_.AbsolutePath;
                 if (!prefix.EndsWith("/"))
                 {
                     prefix += "/";
                 }
-                for (int endpointIndex = 0; endpointIndex < keys.Count(); endpointIndex++)
+                for (int endpointIndex = 0; endpointIndex < partition.listeners_.Count; endpointIndex++)
                 {
-                    var ep = partition.listeners_[keys[endpointIndex]];
+                    var ep = partition.listeners_[endpointIndex];
                     List<int> replicaIndexes;
                     bool statefulPartition = false;
                     if (partition.serviceKind_ == ServiceKind.Stateless)
                     {
                         // For stateless, path is same for all replicas so we need to iterate just once
-                        replicaIndexes = new List<int>() { -1 };
+                        replicaIndexes = new List<int>() { 0 };
                     }
                     else
                     {
                         replicaIndexes = new List<int>();
-                        replicaIndexes.AddRange(Enumerable.Range(0, ep.Count()));
+                        replicaIndexes.AddRange(Enumerable.Range(0, ep.InstanceCount()));
                         statefulPartition = true;
                     }
                     JObject endpointHeader = null;
-                    if (keys[endpointIndex] != "")
+                    if (ep.Name != "")
                     {
                         endpointHeader = new JObject();
                         endpointHeader.Add("name", "ListenerName");
-                        endpointHeader.Add("value", keys[endpointIndex]);
+                        endpointHeader.Add("value", ep.Name);
                     }
+                    
                     for (int index = 0; index < replicaIndexes.Count; index++)
                     {
                         List<EnvoyRouteModel> routeData = new List<EnvoyRouteModel>();
                         List<EnvoyHostModel> hostData = new List<EnvoyHostModel>();
                         string cluster = partitionId.ToString() + "|" + endpointIndex.ToString() + "|" + replicaIndexes[index].ToString();
-                        string prefix_rewrite = ep[index].endpoint_.AbsolutePath;
+                        string prefix_rewrite = ep.GetAt(index).endpoint_.AbsolutePath;
                         List<JObject> headers = new List<JObject>();
                         if (endpointHeader != null)
                         {
                             headers.Add(endpointHeader);
                         }
-                        if (ep[index].role_ == ServiceEndpointRole.StatefulSecondary)
+                        if (ep.GetAt(index).role_ == ServiceEndpointRole.StatefulSecondary)
                         {
                             JObject statefulSecondaryIndex = new JObject();
                             statefulSecondaryIndex.Add("name", "SecondaryReplicaIndex");
-                            statefulSecondaryIndex.Add("value", replicaIndexes[index]);
+                            statefulSecondaryIndex.Add("value", replicaIndexes[index].ToString());
                             headers.Add(statefulSecondaryIndex);
                         }
                         if (statefulPartition)
                         {
-                            hostData.Add(new EnvoyHostModel(ep[index].endpoint_.Host, ep[index].endpoint_.Port));
-                            var rangePartitionInformation = (Int64RangePartitionInformation)partition.partitionInformation_;
-                            if (rangePartitionInformation.LowKey == Int64.MinValue &&
-                                rangePartitionInformation.HighKey == Int64.MaxValue)
+                            hostData.Add(new EnvoyHostModel(ep.GetAt(index).endpoint_.Host, ep.GetAt(index).endpoint_.Port));
+                            var partitionKind = partition.partitionInformation_.Kind;
+                            if (partitionKind == ServicePartitionKind.Int64Range)
                             {
-                                routeData.Add(new EnvoyRouteModel(cluster, prefix, prefix_rewrite, headers));
-                            }
-                            else
-                            {
-                                if (rangePartitionInformation.HighKey - rangePartitionInformation.LowKey > 128)
+                                var rangePartitionInformation = (Int64RangePartitionInformation)partition.partitionInformation_;
+                                if (rangePartitionInformation.LowKey == Int64.MinValue &&
+                                    rangePartitionInformation.HighKey == Int64.MaxValue)
                                 {
-                                    continue;
+                                    routeData.Add(new EnvoyRouteModel(cluster, prefix, prefix_rewrite, headers));
                                 }
-                                for (long partitionKey = rangePartitionInformation.LowKey; partitionKey <= rangePartitionInformation.HighKey; partitionKey++)
+                                else
                                 {
+                                    // Envoy - start and end of the range using half-open interval semantics [start, end)
+                                    var rangeEnd = rangePartitionInformation.HighKey;
+                                    if (rangePartitionInformation.HighKey == Int64.MaxValue)
+                                    {
+                                        JObject maxValHeader = new JObject();
+                                        maxValHeader.Add("name", "PartitionKey");
+                                        maxValHeader.Add("value", Int64.MaxValue.ToString());
+
+                                        List<JObject> maxValHeaders = new List<JObject>(headers);
+                                        maxValHeaders.Add(maxValHeader);
+                                        routeData.Add(new EnvoyRouteModel(cluster, prefix, prefix_rewrite, maxValHeaders));
+                                    }
+                                    else
+                                    {
+                                        rangeEnd ++;
+                                    }                                  
                                     JObject partitionKeyHeader = new JObject();
                                     partitionKeyHeader.Add("name", "PartitionKey");
-                                    partitionKeyHeader.Add("value", partitionKey);
+
+                                    JObject range_match = new JObject();
+                                    range_match.Add("start", rangePartitionInformation.LowKey);
+                                    range_match.Add("end", rangeEnd);
+                                    partitionKeyHeader.Add("range_match", range_match);
 
                                     List<JObject> keyHeaders = new List<JObject>(headers);
                                     keyHeaders.Add(partitionKeyHeader);
                                     routeData.Add(new EnvoyRouteModel(cluster, prefix, prefix_rewrite, keyHeaders));
                                 }
                             }
+                            else if (partitionKind == ServicePartitionKind.Named)
+                            {
+                                var namedPartitionInformation = (NamedPartitionInformation)partition.partitionInformation_;
+
+                                JObject partitionKeyHeader = new JObject();
+                                partitionKeyHeader.Add("name", "PartitionKey");
+                                partitionKeyHeader.Add("value", namedPartitionInformation.Name);
+
+                                List<JObject> keyHeaders = new List<JObject>(headers);
+                                keyHeaders.Add(partitionKeyHeader);
+                                routeData.Add(new EnvoyRouteModel(cluster, prefix, prefix_rewrite, keyHeaders));
+                            }
                         }
                         else
                         {
                             // For stateless, capture addresses for all listeners for the one route
-                            foreach (var address in ep)
+                            for (int i = 0; i < ep.InstanceCount(); i++)
                             {
+                                var address = ep.GetAt(i);
                                 hostData.Add(new EnvoyHostModel(address.endpoint_.Host, address.endpoint_.Port));
                             }
                             routeData.Add(new EnvoyRouteModel(cluster, prefix, prefix_rewrite, headers));
                         }
-                        if (ep[index].endpoint_.Scheme == "https")
+                        if (ep.GetAt(index).endpoint_.Scheme == "https")
                         {
                             if (EnvoyDefaults.cluster_ssl_context != null)
                             {
