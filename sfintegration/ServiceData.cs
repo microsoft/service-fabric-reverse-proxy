@@ -419,6 +419,11 @@ namespace webapi
                 instances = new List<SF_EndpointInstance>();
             }
             instances.Add(new SF_EndpointInstance(role, uri));
+            instances.Sort((x, y) => {
+                if (x.role_ - y.role_ != 0)
+                    return x.role_ - y.role_;
+                return string.CompareOrdinal(x.endpoint_.AbsolutePath, y.endpoint_.AbsolutePath);
+                });
         }
 
         public int InstanceCount()
