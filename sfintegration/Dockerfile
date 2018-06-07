@@ -19,6 +19,7 @@ EXPOSE 19081
 EXPOSE 8001
 WORKDIR /app
 
+COPY Third-Party-Notices.txt /
 COPY . /app
 RUN chmod 755 startup.sh
 CMD ./startup.sh

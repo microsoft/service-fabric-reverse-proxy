@@ -19,6 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="Third-Party-Notices.txt" CopyToPublishDirectory="Always" />  
     <None Include="config.json" CopyToPublishDirectory="Always" />  
     <None Include="config.secure.json" CopyToPublishDirectory="Always" />  
     <None Include="Dockerfile" CopyToPublishDirectory="Always" />  
