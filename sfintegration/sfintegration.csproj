@@ -24,6 +24,10 @@
     <None Include="config.secure.json" CopyToPublishDirectory="Always" />  
     <None Include="Dockerfile" CopyToPublishDirectory="Always" />  
     <None Include="startup.sh" CopyToPublishDirectory="Always" />  
+    <None Include="startup.cmd" CopyToPublishDirectory="Always" />  
+    <None Include="Dockerfile.windows" CopyToPublishDirectory="Always" />  
+    <None Include="config.windows.json" CopyToPublishDirectory="Always" />  
+    <None Include="config.windows.secure.json" CopyToPublishDirectory="Always" /> 
   </ItemGroup>
 
 </Project>
