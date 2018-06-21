@@ -14,7 +14,7 @@ namespace webapi.Controllers
         public IActionResult GetAsync()
         {
             return Ok(
-                new { partitions = SF_Services.partitions_ }
+                new { partitions = SF_Services.partitions_, services = SF_Services.services_ }
                 );
         }
 
