@@ -23,7 +23,7 @@ else
     config_file=config.json
 fi
 
-if [ ${Fabric_NodeName} == ""]
+if [ ${Fabric_NodeName} == "" ]
 then
     Fabric_NodeName="standalone"
 fi
