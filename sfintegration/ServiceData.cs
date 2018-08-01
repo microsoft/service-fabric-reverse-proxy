@@ -193,6 +193,35 @@ namespace webapi
             {
                 LogMessage(String.Format("SF_ClusterCertIssuerThumbprints={0}", server_issuer_thumbprints));
             }
+                        
+            gateway_listen_ip = Environment.GetEnvironmentVariable("Gateway_Listen_IP");
+            if (gateway_listen_ip == null)
+            {
+                gateway_listen_ip = "0.0.0.0";
+            }
+            //Gateway_Config_L4=ApplicationName=App, ServiceName=srv, EndpointName=ep1, PublicPort=8081, ApplicationName=App, ServiceName=srv, EndpointName=ep2, PublicPort=8082
+
+            string gateway_config_L4 = Environment.GetEnvironmentVariable("Gateway_Config_L4");
+            if (gateway_config_L4 != null)
+            {
+                gateway_map = new Dictionary<string, string>();
+                var segments = gateway_config_L4.Split(",");
+                for (int i = 0; i < segments.Count(); i += 4)
+                {
+                    var applicationSegements = segments[i].Split("=");
+                    var serviceSegements = segments[i + 1].Split("=");
+                    var endpointSegements = segments[i + 2].Split("=");
+                    var publicPortSegements = segments[i + 3].Split("=");
+
+                    string serviceName = applicationSegements[1] + "_" + serviceSegements[1];
+                    if (endpointSegements[1] != "")
+                    {
+                        serviceName += "_" + endpointSegements[1];
+                    }
+                    serviceName += "|*|-2";
+                    gateway_map[serviceName] = publicPortSegements[1];
+                }
+            }
         }
         private static string GetInternalGatewayAddress()
         {
@@ -261,6 +290,12 @@ namespace webapi
         public static string[] server_cert_common_names;
 
         public static string[] server_cert_issuer_thumbprints;
+
+        public static bool is_gateway_config = false;
+
+        public static string gateway_listen_ip;
+
+        public static Dictionary<string, string> gateway_map;
     }
     public class EnvoyClustersInformation
     {
@@ -409,6 +444,80 @@ namespace webapi
         public int consecutive_5xx = 3;
 
         static public EnvoyOutlierDetectionDataModel defaultValue = new EnvoyOutlierDetectionDataModel();
+    }
+
+    class EnvoyFilterConfig
+    {
+        public EnvoyFilterConfig(string stat_prefix)
+        {
+            this.stat_prefix = stat_prefix;
+        }
+
+        [JsonProperty]
+        public string stat_prefix;
+    }
+
+    class EnvoyTCPRoute
+    {
+        public EnvoyTCPRoute(string cluster)
+        {
+            this.cluster = cluster;
+        }
+
+        [JsonProperty]
+        public string cluster;
+    }
+    class EnvoyTCPRouteConfig
+    {
+        public EnvoyTCPRouteConfig(string cluster)
+        {
+            routes = new List<EnvoyTCPRoute>();
+            routes.Add(new EnvoyTCPRoute(cluster));
+        }
+        [JsonProperty]
+        List<EnvoyTCPRoute> routes;
+    }
+
+    class EnvoyTCPFilterConfig : EnvoyFilterConfig
+    {
+        public EnvoyTCPFilterConfig(string stat_prefix, string cluster) : base(stat_prefix)
+        {
+            route_config = new EnvoyTCPRouteConfig(cluster);
+        }
+        [JsonProperty]
+        public EnvoyTCPRouteConfig route_config;
+    }
+
+    class EnvoyTCPListenerFilter
+    {
+        public EnvoyTCPListenerFilter(string stat_prefix, string cluster)
+        {
+            config = new EnvoyTCPFilterConfig(stat_prefix, cluster);
+        }
+        [JsonProperty]
+        public string name = "tcp_proxy";
+
+        [JsonProperty]
+        public EnvoyTCPFilterConfig config;
+    }
+
+    class EnvoyListenerModel
+    {
+        public EnvoyListenerModel(string name, string address, string stat_prefix, string cluster)
+        {
+            this.name = name;
+            this.address = address;
+            this.filters = new List<EnvoyTCPListenerFilter>();
+            this.filters.Add(new EnvoyTCPListenerFilter(stat_prefix, cluster));
+        }
+        [JsonProperty]
+        public string name;
+
+        [JsonProperty]
+        public string address;
+
+        [JsonProperty]
+        public List<EnvoyTCPListenerFilter> filters;
     }
 
     public class SF_EndpointInstance
