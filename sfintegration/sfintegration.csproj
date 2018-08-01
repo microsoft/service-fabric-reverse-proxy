@@ -21,6 +21,7 @@
   <ItemGroup>
     <None Include="Third-Party-Notices.txt" CopyToPublishDirectory="Always" />  
     <None Include="config.json" CopyToPublishDirectory="Always" />  
+    <None Include="config.gateway.json" CopyToPublishDirectory="Always" />  
     <None Include="config.secure.json" CopyToPublishDirectory="Always" />  
     <None Include="Dockerfile" CopyToPublishDirectory="Always" />  
     <None Include="startup.sh" CopyToPublishDirectory="Always" />  

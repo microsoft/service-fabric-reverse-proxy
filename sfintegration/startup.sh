@@ -9,18 +9,24 @@ mkdir -p /var/log/sfreverseproxy
 reverse_proxy_log_path="/var/log/sfreverseproxy/stdout"
 
 use_https=${UseHttps:-false}
-if [ ${use_https,,} == "true" ]
+gateway_mode=${GatewayMode:-false}
+if [ ${gateway_mode,,} == "true" ]
 then
-    if [ -z "${ReverseProxyCertThumbprint}" ]
-    then
-        echo $(timestamp), startup.sh, Invalid Reverse Proxy Thumbprint > ${reverse_proxy_log_path}.log
-        exit 1
-    fi
-    sed -e s/ReverseProxyCertThumbprint/$(echo ${ReverseProxyCertThumbprint} | sed 's/[&/\]/\\&/g')/g \
-        config.secure.template.json > ./config.secure.json
-    config_file=config.secure.json
+    config_file=config.gateway.json
 else
-    config_file=config.json
+    if [ ${use_https,,} == "true" ]
+    then
+        if [ -z "${ReverseProxyCertThumbprint}" ]
+        then
+            echo $(timestamp), startup.sh, Invalid Reverse Proxy Thumbprint > ${reverse_proxy_log_path}.log
+            exit 1
+        fi
+        sed -e s/ReverseProxyCertThumbprint/$(echo ${ReverseProxyCertThumbprint} | sed 's/[&/\]/\\&/g')/g \
+            config.secure.template.json > ./config.secure.json
+        config_file=config.secure.json
+    else
+        config_file=config.json
+    fi
 fi
 
 if [ ${Fabric_NodeName} == ""]

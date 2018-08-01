@@ -31,6 +31,26 @@ namespace webapi.Controllers
                 );
         }
 
+        [HttpGet("listeners/{service_cluster}/{service_node}")]
+        public IActionResult GetListeners(string service_cluster, string service_node)
+        {
+            List<EnvoyListenerModel> ret = new List<EnvoyListenerModel>();
+            if (EnvoyDefaults.gateway_map == null)
+            {
+                return Ok(new { listeners = ret });
+            }
+            int index = 0;
+            foreach (var service in EnvoyDefaults.gateway_map)
+            {
+                EnvoyListenerModel info = new EnvoyListenerModel(service.Key, "tcp://" + EnvoyDefaults.gateway_listen_ip + ":" + service.Value, "gateway_proxy", service.Key);
+                ret.Add(info);
+                index++;
+            }
+            return Ok(
+                new { listeners = ret }
+                );
+        }
+
         [HttpGet("clusters/{service_cluster}/{service_node}")]
         public IActionResult GetClusters(string service_cluster, string service_node)
         {
@@ -39,23 +59,37 @@ namespace webapi.Controllers
             {
                 return Ok(new { clusters = ret });
             }
-
-            foreach (var pID in SF_Services.partitions_)
+            if (EnvoyDefaults.gateway_map != null)
             {
-                var info = SF_Services.EnvoyInformationForPartition(pID.Key);
-                foreach (var service in info)
+                foreach (var service in SF_Services.services_)
                 {
-                    ret.Add(service.cluster);
+                    if (!EnvoyDefaults.gateway_map.ContainsKey(service.Key))
+                    {
+                        continue;
+                    }
+                    EnvoyClusterModel info = new EnvoyClusterModel(service.Key);
+                    ret.Add(info);
                 }
             }
-            foreach (var service in SF_Services.services_)
+            else
             {
-                if (!service.Value.StatefulService)
+                foreach (var pID in SF_Services.partitions_)
                 {
-                    continue;
+                    var info = SF_Services.EnvoyInformationForPartition(pID.Key);
+                    foreach (var service in info)
+                    {
+                        ret.Add(service.cluster);
+                    }
                 }
-                EnvoyClusterModel info = new EnvoyClusterModel(service.Key);
-                ret.Add(info);
+                foreach (var service in SF_Services.services_)
+                {
+                    if (!service.Value.StatefulService)
+                    {
+                        continue;
+                    }
+                    EnvoyClusterModel info = new EnvoyClusterModel(service.Key);
+                    ret.Add(info);
+                }
             }
 
             return Ok(
