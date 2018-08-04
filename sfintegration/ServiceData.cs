@@ -62,8 +62,8 @@ namespace webapi
         public static void LogMessage(string message)
         {
             // Get the local time zone and the current local time and year.
-            DateTime currentDate = DateTime.Now;
-            System.Console.WriteLine("{0}, {1}", currentDate.ToString("O"), message);
+            DateTime currentDate = DateTime.UtcNow;
+            System.Console.WriteLine("[{0}][info][sfintegration] {1}", currentDate.ToString("yyyy-MM-dd HH:mm:ss.fffZ"), message);
         }
         static EnvoyDefaults()
         {
