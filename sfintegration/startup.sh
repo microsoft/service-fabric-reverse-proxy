@@ -29,7 +29,7 @@ else
     fi
 fi
 
-if [ ${Fabric_NodeName} == ""]
+if [ ${Fabric_NodeName} == "" ]
 then
     Fabric_NodeName="standalone"
 fi
