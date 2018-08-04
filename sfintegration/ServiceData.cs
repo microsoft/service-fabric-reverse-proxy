@@ -194,11 +194,24 @@ namespace webapi
                 LogMessage(String.Format("SF_ClusterCertIssuerThumbprints={0}", server_issuer_thumbprints));
             }
                         
-            gateway_listen_ip = Environment.GetEnvironmentVariable("Gateway_Listen_IP");
-            if (gateway_listen_ip == null)
+            var gateway_listen_network = Environment.GetEnvironmentVariable("Gateway_Listen_Network");
+            // NET-ISO-1-[OPEN]
+            if (gateway_listen_network != null)
             {
-                gateway_listen_ip = "0.0.0.0";
+                gateway_listen_network = "[" + gateway_listen_network + "]";
+                var env = Environment.GetEnvironmentVariables();
+                var keys = env.Keys;
+                foreach (System.Collections.DictionaryEntry de in env)
+                {
+                    var variable = de.Key.ToString();
+                    if (variable.Contains(gateway_listen_network) && variable.StartsWith("Fabric_NET"))
+                    {
+                        gateway_listen_ip = de.Value.ToString();
+                        break;
+                    }
+                }
             }
+
             //Gateway_Config_L4=ApplicationName=App, ServiceName=srv, EndpointName=ep1, PublicPort=8081, ApplicationName=App, ServiceName=srv, EndpointName=ep2, PublicPort=8082
 
             string gateway_config_L4 = Environment.GetEnvironmentVariable("Gateway_Config_L4");
@@ -293,7 +306,7 @@ namespace webapi
 
         public static bool is_gateway_config = false;
 
-        public static string gateway_listen_ip;
+        public static string gateway_listen_ip = "0.0.0.0";
 
         public static Dictionary<string, string> gateway_map;
     }
@@ -446,15 +459,29 @@ namespace webapi
         static public EnvoyOutlierDetectionDataModel defaultValue = new EnvoyOutlierDetectionDataModel();
     }
 
+    class EnvoyAccessLogConfig
+    {
+        public EnvoyAccessLogConfig()
+        {}
+
+        [JsonProperty]
+        public string path = "./log/sfreverseproxy.access_log.log";
+    }
+
     class EnvoyFilterConfig
     {
         public EnvoyFilterConfig(string stat_prefix)
         {
             this.stat_prefix = stat_prefix;
+            this.access_log = new List<EnvoyAccessLogConfig>();
+            this.access_log.Add(new EnvoyAccessLogConfig());
         }
 
         [JsonProperty]
         public string stat_prefix;
+
+        [JsonProperty]
+        public List<EnvoyAccessLogConfig> access_log;
     }
 
     class EnvoyTCPRoute
