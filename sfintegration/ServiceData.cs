@@ -228,20 +228,27 @@ namespace webapi
 
                 gateway_map = new Dictionary<string, string>();
                 var segments = gateway_config_L4.Split(",");
-                for (int i = 0; i < segments.Count(); i += 4)
+                if (segments.Count() % 4 != 0)
                 {
-                    var applicationSegements = segments[i].Split("=");
-                    var serviceSegements = segments[i + 1].Split("=");
-                    var endpointSegements = segments[i + 2].Split("=");
-                    var publicPortSegements = segments[i + 3].Split("=");
-
-                    string serviceName = applicationSegements[1] + "_" + serviceSegements[1];
-                    if (endpointSegements[1] != "")
+                    LogMessage(String.Format("Invalid Config: Gateway_Config_L4={0}", gateway_config_L4));
+                }
+                else
+                {
+                    for (int i = 0; i < segments.Count(); i += 4)
                     {
-                        serviceName += "_" + endpointSegements[1];
+                        var applicationSegements = segments[i].Split(":");
+                        var serviceSegements = segments[i + 1].Split(":");
+                        var endpointSegements = segments[i + 2].Split(":");
+                        var publicPortSegements = segments[i + 3].Split(":");
+
+                        string serviceName = applicationSegements[1] + "_" + serviceSegements[1];
+                        if (endpointSegements[1] != "")
+                        {
+                            serviceName += "_" + endpointSegements[1];
+                        }
+                        serviceName += "|*|-2";
+                        gateway_map[serviceName] = publicPortSegements[1];
                     }
-                    serviceName += "|*|-2";
-                    gateway_map[serviceName] = publicPortSegements[1];
                 }
             }
             else
