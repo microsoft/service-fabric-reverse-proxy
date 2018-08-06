@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -198,6 +198,7 @@ namespace webapi
             // NET-ISO-1-[OPEN]
             if (gateway_listen_network != null)
             {
+                LogMessage(String.Format("Gateway_Listen_Network={0}", gateway_listen_network));
                 gateway_listen_network = "[" + gateway_listen_network + "]";
                 var env = Environment.GetEnvironmentVariables();
                 var keys = env.Keys;
@@ -211,12 +212,17 @@ namespace webapi
                     }
                 }
             }
+            else
+                LogMessage("Gateway_Listen_Network=null");
+
 
             //Gateway_Config_L4=ApplicationName=App, ServiceName=srv, EndpointName=ep1, PublicPort=8081, ApplicationName=App, ServiceName=srv, EndpointName=ep2, PublicPort=8082
 
             string gateway_config_L4 = Environment.GetEnvironmentVariable("Gateway_Config_L4");
-            if (gateway_config_L4 != null)
+            if (gateway_config_L4 != null && gateway_config_L4 != "")
             {
+                LogMessage(String.Format("Gateway_Config_L4={0}", gateway_config_L4));
+
                 gateway_map = new Dictionary<string, string>();
                 var segments = gateway_config_L4.Split(",");
                 for (int i = 0; i < segments.Count(); i += 4)
@@ -235,6 +241,8 @@ namespace webapi
                     gateway_map[serviceName] = publicPortSegements[1];
                 }
             }
+            else
+                LogMessage("Gateway_Config_L4=null");
         }
         private static string GetInternalGatewayAddress()
         {
