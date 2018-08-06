@@ -193,7 +193,9 @@ namespace webapi
             {
                 LogMessage(String.Format("SF_ClusterCertIssuerThumbprints={0}", server_issuer_thumbprints));
             }
-                        
+
+            LogMessage("Getting Gateway_Listen_Network");
+
             var gateway_listen_network = Environment.GetEnvironmentVariable("Gateway_Listen_Network");
             // NET-ISO-1-[OPEN]
             if (gateway_listen_network != null)
@@ -217,6 +219,7 @@ namespace webapi
 
 
             //Gateway_Config_L4=ApplicationName=App, ServiceName=srv, EndpointName=ep1, PublicPort=8081, ApplicationName=App, ServiceName=srv, EndpointName=ep2, PublicPort=8082
+            LogMessage("Getting Gateway_Config_L4");
 
             string gateway_config_L4 = Environment.GetEnvironmentVariable("Gateway_Config_L4");
             if (gateway_config_L4 != null && gateway_config_L4 != "")
