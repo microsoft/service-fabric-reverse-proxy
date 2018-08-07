@@ -36,7 +36,7 @@ fi
 
 echo $(timestamp), startup.sh, Begin validate Envoy cofigfile, $config_file | tee ${reverse_proxy_log_path}.log
 echo /usr/local/bin/envoy -c ${config_file} --service-cluster ReverseProxy --service-node ${Fabric_NodeName} --mode validate | tee ${reverse_proxy_log_path}.log 2>&1
-/usr/local/bin/envoy -l info -c ${config_file} --service-cluster ReverseProxy --service-node ${Fabric_NodeName} --mode validate | tee "${reverse_proxy_log_path}.log" 2>&1
+/usr/local/bin/envoy -l debug -c ${config_file} --service-cluster ReverseProxy --service-node ${Fabric_NodeName} --mode validate | tee "${reverse_proxy_log_path}.log" 2>&1
 retval=$?
 if [ $retval -eq 1 ]
 then
