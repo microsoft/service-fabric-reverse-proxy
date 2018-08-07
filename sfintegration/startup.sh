@@ -45,5 +45,5 @@ then
 fi
 echo $(timestamp), startup.sh, Succeeded validate Envoy cofigfile, $config_file | tee "${reverse_proxy_log_path}.log" 2>&1
 
-/usr/local/bin/envoy -l debug --disable-hot-restart -c ${config_file} --service-cluster ReverseProxy --service-node ${Fabric_NodeName} | tee "${reverse_proxy_log_path}.envoy.log" 2>&1 &
+/usr/local/bin/envoy -l info --disable-hot-restart -c ${config_file} --service-cluster ReverseProxy --service-node ${Fabric_NodeName} | tee "${reverse_proxy_log_path}.envoy.log" 2>&1 &
 LD_LIBRARY_PATH=/opt/microsoft/servicefabric/bin/Fabric/Fabric.Code:. FabricPackageFileName= dotnet sfintegration.dll | tee "${reverse_proxy_log_path}.sfintegration.log" 2>&1
