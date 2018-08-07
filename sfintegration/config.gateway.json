@@ -5,7 +5,7 @@
         "cluster": "lds"
     },
     "admin": {
-        "access_log_path": "./sfreverseproxy.access_log.admin.log",
+        "access_log_path": "./log/sfreverseproxy.access_log.admin.log",
         "address": "tcp://0.0.0.0:8001"
     },
     "cluster_manager": {

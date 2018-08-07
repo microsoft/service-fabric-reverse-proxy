@@ -1,6 +1,6 @@
 #!/bin/bash
 
-TAG=0.9.5
+TAG=0.10.0
 BRANCH=$1
 DOCKER_USERNAME=$2
 DOCKER_PASSWORD=$3
@@ -18,6 +18,9 @@ echo dotnet build -c $config sfintegration
 dotnet build -c $config sfintegration
 echo dotnet publish -c $config sfintegration
 dotnet publish -c $config sfintegration
+
+# Pull the previous image to speed up image generation
+docker pull $BRANCH/service-fabric-reverse-proxy:latest
 
 # Build the Docker images
 echo docker build -t $BRANCH/service-fabric-reverse-proxy:$TAG ./sfintegration/bin/$config/netcoreapp2.0/publish/.
