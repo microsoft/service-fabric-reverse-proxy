@@ -482,8 +482,8 @@ namespace webapi
         public EnvoyAccessLogConfig()
         {}
 
-        [JsonProperty]
-        public string path = "./log/sfreverseproxy.access_log.log";
+        // [JsonProperty]
+        // public string path = "./sfreverseproxy.access_log.log";
     }
 
     class EnvoyFilterConfig
