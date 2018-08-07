@@ -249,6 +249,7 @@ namespace webapi
                         serviceName += "|*|-2";
                         gateway_map[serviceName] = publicPortSegements[1];
                     }
+                    LogMessage(String.Format("Listeners: {0}", string.Join(";", gateway_map.Select(x => "[" + x.Key + ", " + x.Value + "]").ToArray())));
                 }
             }
             else
@@ -482,8 +483,8 @@ namespace webapi
         public EnvoyAccessLogConfig()
         {}
 
-        // [JsonProperty]
-        // public string path = "./sfreverseproxy.access_log.log";
+        [JsonProperty]
+        public string path = "./sfreverseproxy.access_log.log";
     }
 
     class EnvoyFilterConfig
@@ -491,15 +492,15 @@ namespace webapi
         public EnvoyFilterConfig(string stat_prefix)
         {
             this.stat_prefix = stat_prefix;
-            this.access_log = new List<EnvoyAccessLogConfig>();
-            this.access_log.Add(new EnvoyAccessLogConfig());
+            //this.access_log = new List<EnvoyAccessLogConfig>();
+            //this.access_log.Add(new EnvoyAccessLogConfig());
         }
 
         [JsonProperty]
         public string stat_prefix;
 
-        [JsonProperty]
-        public List<EnvoyAccessLogConfig> access_log;
+        // [JsonProperty]
+        // public List<EnvoyAccessLogConfig> access_log;
     }
 
     class EnvoyTCPRoute
