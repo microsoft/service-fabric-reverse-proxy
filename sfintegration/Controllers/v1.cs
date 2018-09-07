@@ -1,8 +1,14 @@
-﻿using System;
+﻿// ------------------------------------------------------------
+//  Copyright (c) Microsoft Corporation.  All rights reserved.
+//  Licensed under the MIT License (MIT). See License.txt in 
+//  the repo root for license information.
+// ------------------------------------------------------------
+
+using System;
 using System.Collections.Generic;
 using Microsoft.AspNetCore.Mvc;
-using System.Fabric;
-using ServiceFabric.Helpers;
+using Newtonsoft.Json.Linq;
+using sfintegration.envoymodels;
 
 namespace webapi.Controllers
 {
@@ -34,15 +40,19 @@ namespace webapi.Controllers
         [HttpGet("listeners/{service_cluster}/{service_node}")]
         public IActionResult GetListeners(string service_cluster, string service_node)
         {
-            List<EnvoyListenerModel> ret = new List<EnvoyListenerModel>();
+            List<EnvoyListener> ret = new List<EnvoyListener>();
             if (EnvoyDefaults.gateway_map == null)
             {
                 return Ok(new { listeners = ret });
             }
             int index = 0;
-            foreach (var service in EnvoyDefaults.gateway_map)
+            foreach (var entry in EnvoyDefaults.gateway_map)
             {
-                EnvoyListenerModel info = new EnvoyListenerModel(service.Key, "tcp://" + EnvoyDefaults.gateway_listen_ip + ":" + service.Value, "gateway_proxy", service.Key);
+                EnvoyListener info = new EnvoyListener(
+                    "gateway_" + entry.Key, "tcp://" + EnvoyDefaults.gateway_listen_ip + ":" + entry.Key, "gateway_proxy", entry.Value);
+
+                EnvoyDefaults.LogMessage(info.ToString());
+
                 ret.Add(info);
                 index++;
             }
@@ -54,7 +64,7 @@ namespace webapi.Controllers
         [HttpGet("clusters/{service_cluster}/{service_node}")]
         public IActionResult GetClusters(string service_cluster, string service_node)
         {
-            List<EnvoyClusterModel> ret = new List<EnvoyClusterModel>();
+            List<EnvoyCluster> ret = new List<EnvoyCluster>();
             if (SF_Services.partitions_ == null)
             {
                 return Ok(new { clusters = ret });
@@ -63,11 +73,11 @@ namespace webapi.Controllers
             {
                 foreach (var service in SF_Services.services_)
                 {
-                    if (!EnvoyDefaults.gateway_map.ContainsKey(service.Key))
+                    if (!EnvoyDefaults.gateway_clusternames.Contains(service.Key))
                     {
                         continue;
                     }
-                    EnvoyClusterModel info = new EnvoyClusterModel(service.Key);
+                    EnvoyCluster info = new EnvoyCluster(service.Key);
                     ret.Add(info);
                 }
             }
@@ -87,7 +97,7 @@ namespace webapi.Controllers
                     {
                         continue;
                     }
-                    EnvoyClusterModel info = new EnvoyClusterModel(service.Key);
+                    EnvoyCluster info = new EnvoyCluster(service.Key);
                     ret.Add(info);
                 }
             }
@@ -97,25 +107,45 @@ namespace webapi.Controllers
                 );
         }
 
+        Tuple<bool, List<JObject>> RemoveStatefulHeadersAndIdentifySecondary(List<JObject> headers)
+        {
+            for (var i = headers.Count - 1; i >= 0; i--)
+            {
+                var header = headers[i];
+                var headerName = (string)header.GetValue("name");
+                if (headerName == "SecondaryReplicaIndex")
+                {
+                    return new Tuple<bool, List<JObject>>(false, headers);
+                }
+                if (headerName == "PartitionKey")
+                {
+                    headers.RemoveAt(i);
+                }
+            }
+            return new Tuple<bool, List<JObject>>(true, headers);
+        }
+
         [HttpGet("routes/{name}/{service_cluster}/{service_node}")]
         public IActionResult GetRoutes(string name, string service_cluster, string service_node)
         {
-            List<EnvoyRouteModel> ret = new List<EnvoyRouteModel>();
+            List<EnvoyVirtualHost> virtual_hosts = new List<EnvoyVirtualHost>();
+            List<EnvoyRoute> ret = new List<EnvoyRoute>();
             if (SF_Services.partitions_ == null)
             {
-                return Ok(
-                    new
-                    {
-                        virtual_hosts = new[]
-                        {
-                            new {
-                                name = "reverse_proxy",
-                                domains = new List<string>() { "*" },
-                                routes = ret
-                            }
-                        }
-                    });
+                virtual_hosts.Add(new EnvoyVirtualHost(
+                    name,
+                    new List<string>() { "*" },
+                    ret));
+                return Ok(new
+                {
+                    virtual_hosts
+                });
             }
+            if (name.StartsWith("gateway_config|"))
+            {
+                return GetRoutesForGateway(name, virtual_hosts);
+            }
+
             foreach (var pID in SF_Services.partitions_)
             {
                 var info = SF_Services.EnvoyInformationForPartition(pID.Key);
@@ -141,55 +171,130 @@ namespace webapi.Controllers
                     var routes = serviceInfo.routes;
                     foreach (var route in routes)
                     {
-                        bool addRoute = true;
                         route.cluster = service.Key;
-                        var headers = route.headers;
-                        for (var i = headers.Count - 1; i >= 0; i--)
+                        var tuple = RemoveStatefulHeadersAndIdentifySecondary(route.headers);
+                        if (!tuple.Item1)
                         {
-                            var header = headers[i];
-                            var headerName = (string)header.GetValue("name");
-                            if (headerName == "SecondaryReplicaIndex")
-                            {
-                                addRoute = false;
-                                break;
-                            }
-                            if (headerName == "PartitionKey")
-                            {
-                                headers.RemoveAt(i);
-                            }
+                            continue;
                         }
                         route.prefix_rewrite = "/";
-                        if (addRoute)
-                        {
-                            ret.Add(route);
-                        }
+                        ret.Add(route);
                     }
                 }
             }
+            virtual_hosts.Add(new EnvoyVirtualHost(
+                name,
+                new List<string>() { "*" },
+                ret));
             return Ok(
                 new
                 {
-                    virtual_hosts = new[]
+                    virtual_hosts,
+                    EnvoyDefaults.response_headers_to_remove
+                });
+        }
+
+        private IActionResult GetRoutesForGateway(string name, List<EnvoyVirtualHost> ret)
+        {
+            var segments = name.Split("|");
+            if (segments.Length != 2 ||
+                EnvoyDefaults.gateway_map == null ||
+                !EnvoyDefaults.gateway_map.ContainsKey(segments[1]))
+            {
+                return Ok(
+                    new
                     {
-                        new {
-                            name = "reverse_proxy",
-                            domains = new List<string>() { "*" },
-                            routes = ret
+                        virtual_hosts = new[]
+                        {
+                            new {
+                                name = "Dummy",
+                                domains = new List<string>() { "*" },
+                                routes = ret
+                            }
                         }
-                    },
-                    response_headers_to_remove = EnvoyDefaults.response_headers_to_remove
+                    });
+            }
+
+
+            var filterConfigs = EnvoyDefaults.gateway_map[segments[1]];
+            foreach (var config in filterConfigs)
+            {
+                if (config.Type == ListenerFilterConfig.ListenerFilterType.Http)
+                {
+                    var httpHosts = ((ListenerHttpFilterConfig)config).Hosts;
+                    foreach (var host in httpHosts)
+                    {
+                        var routes = new List<EnvoyRoute>();
+                        foreach (var route in host.Routes)
+                        {
+                            var serviceName = route.Destination.EnvoyServiceName();
+                            var service = SF_Services.services_[serviceName];
+                            foreach (var partition in service.Partitions)
+                            {
+                                string routeConfigForPartition = partition.ToString() + "|" + service.EndpointIndex.ToString() + "|0";
+                                var pId = partition;
+                                var info = SF_Services.EnvoyInformationForPartition(pId);
+                                foreach (var serviceInfo in info)
+                                {
+                                    if (serviceInfo.cluster.name != routeConfigForPartition)
+                                    {
+                                        continue;
+                                    }
+                                    foreach (var envoyRoute in serviceInfo.routes)
+                                    {
+                                        envoyRoute.prefix = route.Match.Path.Value;
+                                        envoyRoute.prefix_rewrite = route.Match.Path.Rewrite;
+                                        if (route.Match.Headers != null)
+                                        {
+                                            foreach (var header in route.Match.Headers)
+                                            {
+                                                var envoyHeader = new JObject();
+                                                envoyHeader.Add("name", header.Name);
+                                                envoyHeader.Add("value", header.Value);
+                                                envoyRoute.headers.Add(envoyHeader);
+                                            }
+                                        }
+                                        envoyRoute.cluster = serviceName;
+                                        var tuple = RemoveStatefulHeadersAndIdentifySecondary(envoyRoute.headers);
+                                        if (!tuple.Item1)
+                                        {
+                                            continue;
+                                        }
+                                        routes.Add(envoyRoute);
+                                    }
+                                }
+                            }
+
+                        }
+                        var domain = new List<string>() { host.Name };
+                        var virtual_host = new EnvoyVirtualHost(host.Name,
+                            domain,
+                            routes);
+                        ret.Add(virtual_host);
+                    }
+                }
+            }
+
+            return Ok(
+                new
+                {
+                    virtual_hosts = ret
                 });
         }
 
         [HttpGet("registration/{routeConfig}")]
         public IActionResult GetHosts(string routeConfig)
         {
-            List<EnvoyHostModel> ret = new List<EnvoyHostModel>();
+            List<EnvoyHost> ret = new List<EnvoyHost>();
 
             var nameSegements = routeConfig.Split('|');
             // Deal with service name cluster as opposed to a partition cluster
             if (nameSegements[2] == "-2")
             {
+                if (!SF_Services.services_.ContainsKey(routeConfig))
+                {
+                    return Ok(new { hosts = ret });
+                }
                 var service = SF_Services.services_[routeConfig];
                 foreach (var partition in service.Partitions)
                 {
