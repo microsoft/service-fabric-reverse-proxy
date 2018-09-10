@@ -205,40 +205,46 @@ namespace webapi
 
                 gateway_map = new Dictionary<string, List<ListenerFilterConfig>>();
                 gateway_clusternames = new HashSet<string>();
-                foreach (var e in gatewayProperties.Tcp)
+                if (gatewayProperties.Tcp != null)
                 {
-                    string serviceName = e.Destination.EnvoyServiceName();
-                    if (!gateway_map.ContainsKey(e.Port.ToString()) ||
-                        gateway_map[e.Port.ToString()] == null)
+                    foreach (var e in gatewayProperties.Tcp)
                     {
-                        gateway_map[e.Port.ToString()] = new List<ListenerFilterConfig>();
-                    }
-                    gateway_map[e.Port.ToString()].Add(
-                        new ListenerFilterConfig(
-                            e.Name,
-                            ListenerFilterConfig.ListenerFilterType.Tcp,
-                            serviceName));
-                    gateway_clusternames.Add(serviceName);
-                }
-                foreach (var httpConfig in gatewayProperties.Http)
-                {
-                    string configName = "gateway_config|" + httpConfig.Port;
-                    if (!gateway_map.ContainsKey(httpConfig.Port.ToString()) ||
-                        gateway_map[httpConfig.Port.ToString()] == null)
-                    {
-                        gateway_map[httpConfig.Port.ToString()] = new List<ListenerFilterConfig>();
-                    }
-                    gateway_map[httpConfig.Port.ToString()].Add(
-                        new ListenerHttpFilterConfig(
-                            httpConfig.Name,
-                            configName,
-                            httpConfig.Hosts));
-                    foreach (var host in httpConfig.Hosts)
-                    {
-                        foreach (var e in host.Routes)
+                        string serviceName = e.Destination.EnvoyServiceName();
+                        if (!gateway_map.ContainsKey(e.Port.ToString()) ||
+                            gateway_map[e.Port.ToString()] == null)
                         {
-                            var serviceName = e.Destination.EnvoyServiceName();
-                            gateway_clusternames.Add(serviceName);
+                            gateway_map[e.Port.ToString()] = new List<ListenerFilterConfig>();
+                        }
+                        gateway_map[e.Port.ToString()].Add(
+                            new ListenerFilterConfig(
+                                e.Name,
+                                ListenerFilterConfig.ListenerFilterType.Tcp,
+                                serviceName));
+                        gateway_clusternames.Add(serviceName);
+                    }
+                }
+                if (gatewayProperties.Http != null)
+                {
+                    foreach (var httpConfig in gatewayProperties.Http)
+                    {
+                        string configName = "gateway_config|" + httpConfig.Port;
+                        if (!gateway_map.ContainsKey(httpConfig.Port.ToString()) ||
+                            gateway_map[httpConfig.Port.ToString()] == null)
+                        {
+                            gateway_map[httpConfig.Port.ToString()] = new List<ListenerFilterConfig>();
+                        }
+                        gateway_map[httpConfig.Port.ToString()].Add(
+                            new ListenerHttpFilterConfig(
+                                httpConfig.Name,
+                                configName,
+                                httpConfig.Hosts));
+                        foreach (var host in httpConfig.Hosts)
+                        {
+                            foreach (var e in host.Routes)
+                            {
+                                var serviceName = e.Destination.EnvoyServiceName();
+                                gateway_clusternames.Add(serviceName);
+                            }
                         }
                     }
                 }
