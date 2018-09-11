@@ -673,7 +673,8 @@ namespace webapi
                         try
                         {
                             var listenerAddressString = notificationListener.Value.ToString();
-                            var listenerAddress = new Uri(listenerAddressString);
+                            EnvoyDefaults.LogMessage(String.Format("AddressString = {0}", listenerAddressString));
+                            var listenerAddress = new UriBuilder(listenerAddressString).Uri;
                             if (listenerAddress.HostNameType == UriHostNameType.Dns)
                             {
                                 var ipaddrs = Dns.GetHostAddresses(listenerAddress.Host);
@@ -844,7 +845,8 @@ namespace webapi
                                 try
                                 {
                                     var listenerAddressString = replicaListener.Value.ToString();
-                                    var listenerAddress = new Uri(listenerAddressString);
+                                    EnvoyDefaults.LogMessage(String.Format("AddressString = {0}", listenerAddressString));
+                                    var listenerAddress = new UriBuilder(listenerAddressString).Uri;
                                     if (listenerAddress.HostNameType == UriHostNameType.Dns)
                                     {
                                         var ipaddrs = Dns.GetHostAddresses(listenerAddress.Host);
