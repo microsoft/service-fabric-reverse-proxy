@@ -58,11 +58,30 @@ namespace webapi
 
     public class EnvoyDefaults
     {
-        public static void LogMessage(string message)
+        private static int indentLevel = 0;
+        private static string indentSpaces = "";
+        public enum IndentOperation
         {
+            NoChange,
+            BeginLevel,
+            EndLevel
+        }
+        public static void LogMessage(string message, IndentOperation indentOp = IndentOperation.NoChange)
+        {
+            if (indentOp == IndentOperation.EndLevel)
+            {
+                indentLevel--;
+                if (indentLevel < 0) indentLevel = 0;
+                indentSpaces = new string(' ', indentLevel * 2);
+            }
             // Get the local time zone and the current local time and year.
             DateTime currentDate = DateTime.UtcNow;
-            System.Console.WriteLine("[{0}][info][sfintegration] {1}", currentDate.ToString("yyyy-MM-dd HH:mm:ss.fffZ"), message);
+            System.Console.WriteLine("[{0}][info][sfintegration] {2}{1}", currentDate.ToString("yyyy-MM-dd HH:mm:ss.fffZ"), message, indentSpaces);
+            if (indentOp == IndentOperation.BeginLevel)
+            {
+                indentLevel++;
+                indentSpaces = new string(' ', indentLevel * 2);
+            }
         }
         static EnvoyDefaults()
         {
@@ -252,10 +271,6 @@ namespace webapi
             else
                 LogMessage("Gateway_Config=null");
 
-            //LogMessage("Getting Gateway_Listen_Network");
-
-            //var gateway_listen_network = Environment.GetEnvironmentVariable("Gateway_Listen_Network");
-            //// NET-ISO-1-[OPEN]
             if (gateway_listen_network != null)
             {
                 LogMessage(String.Format("Gateway_Listen_Network={0}", gateway_listen_network));
@@ -275,6 +290,7 @@ namespace webapi
             else
                 LogMessage("Gateway_Listen_Network=null");
 
+            LogMessage("gateway_listen_ip=" + gateway_listen_ip);
         }
         private static string GetInternalGatewayAddress()
         {
@@ -369,15 +385,6 @@ namespace webapi
         [JsonProperty]
         public List<EnvoyHost> hosts;
     }
-
-
-
-
-
-
-
-
-
 
     public class SF_EndpointInstance
     {
@@ -491,7 +498,6 @@ namespace webapi
         static private FabricClient client;
         static SF_Services()
         {
-
             try
             {
                 partitions_ = null;
@@ -569,6 +575,7 @@ namespace webapi
         // Assumes partitions_ is not null and the data structures are already locked
         private static void RemovePartitionFromService(Guid partitionId)
         {
+            EnvoyDefaults.LogMessage(String.Format("Removed: {0}", partitionId));
             foreach (var service in services_)
             {
                 service.Value.Partitions.RemoveAll(x => x == partitionId);
@@ -581,6 +588,8 @@ namespace webapi
 
         private static void AddPartitionToService(Guid partitionId, SF_Partition partitionInfo)
         {
+            EnvoyDefaults.LogMessage(String.Format("Added: {0}={1}", partitionId,
+                JsonConvert.SerializeObject(partitionInfo)));
             for (int listenerIndex = 0; listenerIndex < partitionInfo.listeners_.Count; listenerIndex++)
             {
                 string serviceName = CalculateNameForService(partitionInfo, listenerIndex);
@@ -603,6 +612,7 @@ namespace webapi
 
         private static void Handler(Object sender, EventArgs eargs)
         {
+            EnvoyDefaults.LogMessage("Notification Handler: Start", EnvoyDefaults.IndentOperation.BeginLevel);
             try
             {
                 var notification = ((FabricClient.ServiceManagementClient.ServiceNotificationEventArgs)eargs).Notification;
@@ -621,20 +631,26 @@ namespace webapi
                             partitionsAdd_.Remove(notification.PartitionId);
                             partitionsRemove_[notification.PartitionId] = null;
                         }
-                        EnvoyDefaults.LogMessage(String.Format("Removed: {0}", notification.PartitionId));
-
+                        EnvoyDefaults.LogMessage("Notification Handler: End", EnvoyDefaults.IndentOperation.EndLevel);
                         return;
                     }
                 }
 
                 List<SF_Endpoint> listeners = new List<SF_Endpoint>();
                 ServiceEndpointRole role = ServiceEndpointRole.Invalid;
+                EnvoyDefaults.LogMessage(String.Format("{0}: Start Enumerating Replicas", notification.PartitionId),
+                    EnvoyDefaults.IndentOperation.BeginLevel);
+                EnvoyDefaults.LogMessage(String.Format("{0}: Replica Count = {1}", notification.PartitionId, 
+                    notification.Endpoints.Count()));
                 foreach (var notificationEndpoint in notification.Endpoints)
                 {
                     if (notificationEndpoint.Address.Length == 0)
                     {
+                        EnvoyDefaults.LogMessage("_Node = <Empty>");
                         continue;
                     }
+
+                    EnvoyDefaults.LogMessage(String.Format("_Node = {0}", notificationEndpoint.Address));
                     JObject addresses;
                     try
                     {
@@ -657,11 +673,6 @@ namespace webapi
                         try
                         {
                             var listenerAddressString = notificationListener.Value.ToString();
-                            if (!listenerAddressString.StartsWith("http") &&
-                                !listenerAddressString.StartsWith("https"))
-                            {
-                                continue;
-                            }
                             var listenerAddress = new Uri(listenerAddressString);
                             if (listenerAddress.HostNameType == UriHostNameType.Dns)
                             {
@@ -693,12 +704,15 @@ namespace webapi
                         role = notificationEndpoint.Role;
                     }
                 }
+                EnvoyDefaults.LogMessage(String.Format("{0}: End Enumerating Replicas", notification.PartitionId),
+                    EnvoyDefaults.IndentOperation.EndLevel);
 
                 // Remove any listeners without active endpoints
                 listeners.RemoveAll(x => x.InstanceCount() == 0);
 
                 if (listeners.Count == 0)
                 {
+                    EnvoyDefaults.LogMessage("Notification Handler: End", EnvoyDefaults.IndentOperation.EndLevel);
                     return;
                 }
 
@@ -721,8 +735,6 @@ namespace webapi
                         partitionsRemove_.Remove(notification.PartitionId);
                         partitionsAdd_[notification.PartitionId] = partitionInfo;
                     }
-                    EnvoyDefaults.LogMessage(String.Format("Added: {0}={1}", notification.PartitionId,
-                        JsonConvert.SerializeObject(partitionInfo)));
                 }
             }
             catch (Exception e)
@@ -730,6 +742,7 @@ namespace webapi
                 EnvoyDefaults.LogMessage(String.Format("Error={0}", e.Message));
                 EnvoyDefaults.LogMessage(String.Format("Error={0}", e.StackTrace));
             }
+            EnvoyDefaults.LogMessage("Notification Handler: End", EnvoyDefaults.IndentOperation.EndLevel);
         }
 
         /// <summary>
@@ -755,29 +768,43 @@ namespace webapi
             }
             catch (Exception e)
             {
-                EnvoyDefaults.LogMessage("GetApplicationListAsync failed");
+                EnvoyDefaults.LogMessage("GetApplicationListAsync: Failed");
                 EnvoyDefaults.LogMessage(String.Format("Error={0}", e.Message));
                 EnvoyDefaults.LogMessage(String.Format("Error={0}", e.StackTrace));
                 Environment.FailFast("GetApplicationListAsync failed");
             }
-            EnvoyDefaults.LogMessage("GetApplicationListAsync Succeeded");
+            EnvoyDefaults.LogMessage("GetApplicationListAsync: Succeeded");
+            EnvoyDefaults.LogMessage(String.Format("GetApplicationListAsync: Application Count = {0}", applications.Count()));
+            EnvoyDefaults.LogMessage("Start Enumerating Applications", EnvoyDefaults.IndentOperation.BeginLevel);
             foreach (var application in applications)
             {
+                EnvoyDefaults.LogMessage(String.Format("{0}: Start Enumerating Services", application.ApplicationName), 
+                    EnvoyDefaults.IndentOperation.BeginLevel);
                 var services = await queryManager.GetServiceListAsync(application.ApplicationName);
+                EnvoyDefaults.LogMessage(String.Format("{0}: Service Count = {1}", application.ApplicationName, services.Count()));
                 foreach (var service in services)
                 {
+                    EnvoyDefaults.LogMessage(String.Format("{0}: Start Enumerating Partitions", service.ServiceName),
+                        EnvoyDefaults.IndentOperation.BeginLevel);
                     var partitions = await queryManager.GetPartitionListAsync(service.ServiceName);
+                    EnvoyDefaults.LogMessage(String.Format("{0}: Partition Count = {1}", service.ServiceName, partitions.Count()));
                     foreach (var partition in partitions)
                     {
                         List<SF_Endpoint> listeners = new List<SF_Endpoint>();
 
+                        EnvoyDefaults.LogMessage(String.Format("{0}: Start Enumerating Replicas", partition.PartitionInformation.Id),
+                            EnvoyDefaults.IndentOperation.BeginLevel);
                         var replicas = await queryManager.GetReplicaListAsync(partition.PartitionInformation.Id);
+                        EnvoyDefaults.LogMessage(String.Format("{0}: Replica Count = {1}", partition.PartitionInformation.Id, replicas.Count()));
                         foreach (var replica in replicas)
                         {
                             if (replica.ReplicaAddress.Length == 0)
                             {
+                                EnvoyDefaults.LogMessage(String.Format("{0} = <Empty>", replica.NodeName));
                                 continue;
                             }
+
+                            EnvoyDefaults.LogMessage(String.Format("{0} = {1}", replica.NodeName, replica.ReplicaAddress));
                             JObject addresses;
                             try
                             {
@@ -817,12 +844,7 @@ namespace webapi
                                 try
                                 {
                                     var listenerAddressString = replicaListener.Value.ToString();
-                                    if (!listenerAddressString.StartsWith("http") &&
-                                        !listenerAddressString.StartsWith("https"))
-                                    {
-                                        continue;
-                                    }
-                                    var listenerAddress = new Uri(replicaListener.Value.ToString());
+                                    var listenerAddress = new Uri(listenerAddressString);
                                     if (listenerAddress.HostNameType == UriHostNameType.Dns)
                                     {
                                         var ipaddrs = Dns.GetHostAddresses(listenerAddress.Host);
@@ -848,25 +870,31 @@ namespace webapi
                                     EnvoyDefaults.LogMessage(String.Format("Error={0}", e));
                                 }
                             }
+                            EnvoyDefaults.LogMessage(String.Format("{0}: End Enumerating Replicas", partition.PartitionInformation.Id),
+                                EnvoyDefaults.IndentOperation.EndLevel);
                         }
 
                         // Remove any listeners without active endpoints
                         listeners.RemoveAll(x => x.InstanceCount() == 0);
 
-                        if (listeners.Count == 0)
+                        if (listeners.Count != 0)
                         {
-                            continue;
+                            var partitionInfo = new SF_Partition(service.ServiceName,
+                                service.ServiceKind,
+                                partition.PartitionInformation,
+                                null,
+                                listeners);
+
+                            partitionData[partition.PartitionInformation.Id] = partitionInfo;
                         }
-
-                        var partitionInfo = new SF_Partition(service.ServiceName,
-                            service.ServiceKind,
-                            partition.PartitionInformation,
-                            null,
-                            listeners);
-
-                        partitionData[partition.PartitionInformation.Id] = partitionInfo;
+                        EnvoyDefaults.LogMessage(String.Format("{0}: End Enumerating Partitions", service.ServiceName),
+                                EnvoyDefaults.IndentOperation.EndLevel);
                     }
+                    EnvoyDefaults.LogMessage(String.Format("{0}: End Enumerating Services", application.ApplicationName),
+                                EnvoyDefaults.IndentOperation.EndLevel);
                 }
+                EnvoyDefaults.LogMessage("End Enumerating Applications",
+                                EnvoyDefaults.IndentOperation.EndLevel);
             }
 
             // Process changes received through notifications
