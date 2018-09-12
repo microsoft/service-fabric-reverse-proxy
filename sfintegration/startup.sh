@@ -13,18 +13,14 @@ timestamperror() {
 if [ "${Fabric_Folder_App_Log}" == "" ]
 then
     Fabric_Folder_App_Log=./log
+else
+    ln -s ${Fabric_Folder_App_Log} ./log
 fi
 reverse_proxy_log_path=${Fabric_Folder_App_Log}/sfreverseproxy.stdout
 
-
 cat /proc/sys/kernel/random/entropy_avail
-set | tee -a ${reverse_proxy_log_path}.log
 haveged
-cat /proc/sys/kernel/random/entropy_avail
-
-
-
-
+set | tee -a ${reverse_proxy_log_path}.log
 
 use_https=${UseHttps:-false}
 gateway_mode=${GatewayMode:-false}
