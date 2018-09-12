@@ -50,9 +50,6 @@ namespace webapi.Controllers
             {
                 EnvoyListener info = new EnvoyListener(
                     "gateway_" + entry.Key, "tcp://" + EnvoyDefaults.gateway_listen_ip + ":" + entry.Key, "gateway_proxy", entry.Value);
-
-                EnvoyDefaults.LogMessage(info.ToString());
-
                 ret.Add(info);
                 index++;
             }
