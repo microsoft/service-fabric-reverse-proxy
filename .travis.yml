@@ -4,7 +4,7 @@ services:
 os: linux
 sudo: required
 mono: none
-dotnet: 2.1.4
+dotnet: 2.1.402
 branches:
   only:
   - master
