@@ -13,6 +13,7 @@ timestamperror() {
 if [ "${Fabric_Folder_App_Log}" == "" ]
 then
     Fabric_Folder_App_Log=./log
+    mkdir ./log
 else
     ln -s ${Fabric_Folder_App_Log} ./log
 fi
@@ -58,7 +59,7 @@ then
 fi
 echo $(timestamp) Succeeded validate Envoy cofigfile, $config_file | tee -a "${reverse_proxy_log_path}.log" 
 echo $(timestamp) /usr/local/bin/envoy -l info --disable-hot-restart -c ${config_file} --service-cluster ReverseProxy --service-node ${Fabric_NodeName} | tee -a "${reverse_proxy_log_path}.log"
-echo $(timestamp) LD_LIBRARY_PATH=/opt/microsoft/servicefabric/bin/Fabric/Fabric.Code:. FabricPackageFileName= dotnet sfintegration.dll | tee -a "${reverse_proxy_log_path}.log"
+echo $(timestamp) LD_LIBRARY_PATH=/opt/microsoft/servicefabric/bin/Fabric/Fabric.Code:. FabricPackageFileName= ./sfintegration | tee -a "${reverse_proxy_log_path}.log"
 
 /usr/local/bin/envoy -l info --disable-hot-restart -c ${config_file} --service-cluster ReverseProxy --service-node ${Fabric_NodeName}  2>&1 | tee -a "${reverse_proxy_log_path}.envoy.log" &
-LD_LIBRARY_PATH=/opt/microsoft/servicefabric/bin/Fabric/Fabric.Code:. FabricPackageFileName= dotnet sfintegration.dll  2>&1 | tee -a "${reverse_proxy_log_path}.sfintegration.log"
+LD_LIBRARY_PATH=/opt/microsoft/servicefabric/bin/Fabric/Fabric.Code:. FabricPackageFileName= ./sfintegration  2>&1 | tee -a "${reverse_proxy_log_path}.sfintegration.log"

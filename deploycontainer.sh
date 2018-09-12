@@ -16,15 +16,15 @@ config=Release
 
 echo dotnet build -c $config sfintegration
 dotnet build -c $config sfintegration
-echo dotnet publish -c $config sfintegration
+echo dotnet publish -c $config sfintegration -f netcoreapp2.1 -r ubuntu.16.04-x64 --self-contained
 dotnet publish -c $config sfintegration
 
 # Pull the previous image to speed up image generation
 docker pull $BRANCH/service-fabric-reverse-proxy:latest
 
 # Build the Docker images
-echo docker build -t $BRANCH/service-fabric-reverse-proxy:$TAG ./sfintegration/bin/$config/netcoreapp2.0/publish/.
-docker build -t $BRANCH/service-fabric-reverse-proxy:$TAG ./sfintegration/bin/$config/netcoreapp2.0/publish/.
+echo docker build -t $BRANCH/service-fabric-reverse-proxy:$TAG ./sfintegration/bin/$config/netcoreapp2.1/ubuntu.16.04-x64/publish/.
+docker build -t $BRANCH/service-fabric-reverse-proxy:$TAG ./sfintegration/bin/$config/netcoreapp2.1/ubuntu.16.04-x64/publish/.
 echo docker tag $BRANCH/service-fabric-reverse-proxy:$TAG $BRANCH/service-fabric-reverse-proxy:xenial-$TAG
 docker tag $BRANCH/service-fabric-reverse-proxy:$TAG $BRANCH/service-fabric-reverse-proxy:xenial-$TAG
 echo docker tag $BRANCH/service-fabric-reverse-proxy:$TAG $BRANCH/service-fabric-reverse-proxy:latest
