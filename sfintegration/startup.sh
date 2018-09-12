@@ -10,12 +10,21 @@ timestamperror() {
   echo [$(date +"%Y-%m-%d %H:%M:%S.%3N%Z")][error][startup.sh]
 }
 
+if [ "${Fabric_Folder_App_Log}" == "" ]
+then
+    Fabric_Folder_App_Log=./log
+fi
+reverse_proxy_log_path=${Fabric_Folder_App_Log}/sfreverseproxy.stdout
+
+
 cat /proc/sys/kernel/random/entropy_avail
-systemctl start haveged
+set | tee -a ${reverse_proxy_log_path}.log
+haveged
 cat /proc/sys/kernel/random/entropy_avail
 
-ln -s ${Fabric_Folder_App_Log} ./log
-reverse_proxy_log_path=./log/sfreverseproxy.stdout
+
+
+
 
 use_https=${UseHttps:-false}
 gateway_mode=${GatewayMode:-false}
