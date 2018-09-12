@@ -7,7 +7,6 @@ RUN apt-get update && \
     apt-transport-https \
     libssh2.1 \
     curl \
-    haveged \
     iproute2 \
     net-tools
 

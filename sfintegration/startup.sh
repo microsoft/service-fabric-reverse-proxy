@@ -18,9 +18,8 @@ else
 fi
 reverse_proxy_log_path=${Fabric_Folder_App_Log}/sfreverseproxy.stdout
 
-cat /proc/sys/kernel/random/entropy_avail
-haveged
 set | tee -a ${reverse_proxy_log_path}.log
+cat /proc/sys/kernel/random/entropy_avail
 
 use_https=${UseHttps:-false}
 gateway_mode=${GatewayMode:-false}
