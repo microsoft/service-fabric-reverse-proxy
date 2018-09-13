@@ -104,7 +104,10 @@ namespace webapi.Controllers
                 );
         }
 
-        Tuple<bool, List<JObject>> RemoveStatefulHeadersAndIdentifySecondary(List<JObject> headers)
+        // removes stateful header - PartitionKey and returns remaining headers
+        // if it matches filters
+        // not secondary and listername matches give name (if not null)
+        Tuple<bool, List<JObject>> RemoveStatefulHeadersAndFilter(List<JObject> headers, string listenerName = null)
         {
             for (var i = headers.Count - 1; i >= 0; i--)
             {
@@ -112,7 +115,11 @@ namespace webapi.Controllers
                 var headerName = (string)header.GetValue("name");
                 if (headerName == "SecondaryReplicaIndex")
                 {
-                    return new Tuple<bool, List<JObject>>(false, headers);
+                    return new Tuple<bool, List<JObject>>(false, null);
+                }
+                if (headerName == "ListenerName" && listenerName != null && (string)header.GetValue("value") != listenerName)
+                {
+                    return new Tuple<bool, List<JObject>>(false, null);
                 }
                 if (headerName == "PartitionKey")
                 {
@@ -169,7 +176,7 @@ namespace webapi.Controllers
                     foreach (var route in routes)
                     {
                         route.cluster = service.Key;
-                        var tuple = RemoveStatefulHeadersAndIdentifySecondary(route.headers);
+                        var tuple = RemoveStatefulHeadersAndFilter(route.headers);
                         if (!tuple.Item1)
                         {
                             continue;
@@ -239,6 +246,14 @@ namespace webapi.Controllers
                                     }
                                     foreach (var envoyRoute in serviceInfo.routes)
                                     {
+                                        var tuple = RemoveStatefulHeadersAndFilter(envoyRoute.headers, route.Destination.EndpointName);
+                                        if (!tuple.Item1)
+                                        {
+                                            continue;
+                                        }
+
+                                        // We should filter only on user specified headers
+                                        envoyRoute.headers = new List<JObject>();
                                         envoyRoute.prefix = route.Match.Path.Value;
                                         envoyRoute.prefix_rewrite = route.Match.Path.Rewrite;
                                         if (route.Match.Headers != null)
@@ -252,11 +267,6 @@ namespace webapi.Controllers
                                             }
                                         }
                                         envoyRoute.cluster = serviceName;
-                                        var tuple = RemoveStatefulHeadersAndIdentifySecondary(envoyRoute.headers);
-                                        if (!tuple.Item1)
-                                        {
-                                            continue;
-                                        }
                                         routes.Add(envoyRoute);
                                     }
                                 }
