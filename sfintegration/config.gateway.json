@@ -2,7 +2,8 @@
     "listeners": [
     ],
     "lds": {
-        "cluster": "lds"
+        "cluster": "lds",
+        "refresh_delay_ms": 10000
     },
     "admin": {
         "access_log_path": "./log/sfreverseproxy.access_log.admin.log",

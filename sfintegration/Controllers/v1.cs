@@ -232,6 +232,10 @@ namespace webapi.Controllers
                         foreach (var route in host.Routes)
                         {
                             var serviceName = route.Destination.EnvoyServiceName();
+                            if (!SF_Services.services_.ContainsKey(serviceName))
+                            {
+                                continue;
+                            }
                             var service = SF_Services.services_[serviceName];
                             foreach (var partition in service.Partitions)
                             {

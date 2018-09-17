@@ -5,6 +5,7 @@
 // ------------------------------------------------------------
 
 using Newtonsoft.Json;
+using System.Collections.Generic;
 
 namespace sfintegration.envoymodels
 {
@@ -13,14 +14,14 @@ namespace sfintegration.envoymodels
         public EnvoyFilterConfig(string stat_prefix)
         {
             this.stat_prefix = stat_prefix;
-            //this.access_log = new List<EnvoyAccessLogConfig>();
-            //this.access_log.Add(new EnvoyAccessLogConfig());
+            this.access_log = new List<EnvoyAccessLogConfig>();
+            this.access_log.Add(new EnvoyAccessLogConfig());
         }
 
         [JsonProperty]
         public string stat_prefix;
 
-        //[JsonProperty]
-        //public List<EnvoyAccessLogConfig> access_log;
+        [JsonProperty]
+        public List<EnvoyAccessLogConfig> access_log;
     }
 }
