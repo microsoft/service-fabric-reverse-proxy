@@ -532,7 +532,7 @@ namespace webapi
                             creds.RemoteCommonNames.Add(commonName);
                         }
                     }
-                    else
+                    else if (EnvoyDefaults.client_cert_subject_name != null)
                     {
                         creds.RemoteCommonNames.Add(EnvoyDefaults.client_cert_subject_name);
                     }
