@@ -502,18 +502,29 @@ namespace webapi
             {
                 partitions_ = null;
 
-                if (EnvoyDefaults.client_cert_subject_name != null)
+                if (EnvoyDefaults.client_cert_subject_name != null || EnvoyDefaults.client_cert_issuer_thumbprints != null)
                 {
+                    EnvoyDefaults.LogMessage("Client: Creating, secure");
+
                     X509Credentials creds = new X509Credentials();
-                    creds.FindType = X509FindType.FindBySubjectName;
-                    creds.FindValue = EnvoyDefaults.client_cert_subject_name;
-                    if (EnvoyDefaults.client_cert_issuer_thumbprints != null)
+                    if (EnvoyDefaults.client_cert_subject_name != null)
                     {
-                        foreach (var issuer in EnvoyDefaults.client_cert_issuer_thumbprints)
+                        creds.FindType = X509FindType.FindBySubjectName;
+                        creds.FindValue = EnvoyDefaults.client_cert_subject_name;
+                        if (EnvoyDefaults.client_cert_issuer_thumbprints != null)
                         {
-                            creds.IssuerThumbprints.Add(issuer);
+                            foreach (var issuer in EnvoyDefaults.client_cert_issuer_thumbprints)
+                            {
+                                creds.IssuerThumbprints.Add(issuer);
+                            }
                         }
                     }
+                    else
+                    {
+                        creds.FindType = X509FindType.FindByThumbprint;
+                        creds.FindValue = EnvoyDefaults.client_cert_issuer_thumbprints[0];
+                    }
+
                     if (EnvoyDefaults.server_cert_common_names != null)
                     {
                         foreach (var commonName in EnvoyDefaults.server_cert_common_names)
@@ -540,13 +551,14 @@ namespace webapi
                         }
                     }
                     creds.StoreLocation = StoreLocation.LocalMachine;
-                    creds.StoreName = "/app/sfcerts";
+                    creds.StoreName = "/var/lib/sfcerts";
 
                     client = new FabricClient(creds, EnvoyDefaults.fabricUri);
                 }
                 else
                 {
-                    client = new FabricClient(EnvoyDefaults.fabricUri);
+                        EnvoyDefaults.LogMessage("Client: Creating, nonsecure");
+                        client = new FabricClient(EnvoyDefaults.fabricUri);
                 }
                 EnvoyDefaults.LogMessage("Client sucessfully created");
 
