@@ -161,17 +161,17 @@ namespace webapi
 
             client_cert_subject_name = Environment.GetEnvironmentVariable("SF_ClientCertCommonName");
             var issuer_thumbprints = Environment.GetEnvironmentVariable("SF_ClientCertIssuerThumbprints");
-            if (issuer_thumbprints != null)
+            if (!string.IsNullOrWhiteSpace(issuer_thumbprints))
             {
                 client_cert_issuer_thumbprints = issuer_thumbprints.Split(',');
             }
             var server_common_names = Environment.GetEnvironmentVariable("SF_ClusterCertCommonNames");
-            if (server_common_names != null)
+            if (!string.IsNullOrWhiteSpace(server_common_names))
             {
                 server_cert_common_names = server_common_names.Split(',');
             }
             var server_issuer_thumbprints = Environment.GetEnvironmentVariable("SF_ClusterCertIssuerThumbprints");
-            if (server_issuer_thumbprints != null)
+            if (!string.IsNullOrWhiteSpace(server_issuer_thumbprints))
             {
                 server_cert_issuer_thumbprints = server_issuer_thumbprints.Split(',');
             }
@@ -209,7 +209,7 @@ namespace webapi
             }
             if (server_issuer_thumbprints != null)
             {
-                LogMessage(String.Format("SF_ClusterCertIssuerThumbprints={0}", server_issuer_thumbprints));
+                LogMessage(String.Format("  ={0}", server_issuer_thumbprints));
             }
 
             var gateway_listen_network = "";
@@ -502,12 +502,13 @@ namespace webapi
             {
                 partitions_ = null;
 
-                if (!string.IsNullOrEmpty(EnvoyDefaults.client_cert_subject_name) || EnvoyDefaults.client_cert_issuer_thumbprints != null)
+                if (!string.IsNullOrWhiteSpace(EnvoyDefaults.client_cert_subject_name) || 
+                    EnvoyDefaults.client_cert_issuer_thumbprints != null)
                 {
                     EnvoyDefaults.LogMessage("Client: Creating, secure");
 
                     X509Credentials creds = new X509Credentials();
-                    if (!string.IsNullOrEmpty(EnvoyDefaults.client_cert_subject_name))
+                    if (!string.IsNullOrWhiteSpace(EnvoyDefaults.client_cert_subject_name))
                     {
                         creds.FindType = X509FindType.FindBySubjectName;
                         creds.FindValue = EnvoyDefaults.client_cert_subject_name;
@@ -532,7 +533,7 @@ namespace webapi
                             creds.RemoteCommonNames.Add(commonName);
                         }
                     }
-                    else if (!string.IsNullOrEmpty(EnvoyDefaults.client_cert_subject_name))
+                    else if (!string.IsNullOrWhiteSpace(EnvoyDefaults.client_cert_subject_name))
                     {
                         creds.RemoteCommonNames.Add(EnvoyDefaults.client_cert_subject_name);
                     }
