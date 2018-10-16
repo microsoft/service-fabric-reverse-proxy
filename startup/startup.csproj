@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>netcoreapp2.0</TargetFramework>
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win10-x64</RuntimeIdentifier>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="../Third-Party-Notices.txt" CopyToPublishDirectory="Always" />
+    <None Include="startup.cmd" CopyToPublishDirectory="Always" />
+    <None Include="Dockerfile.windows" CopyToPublishDirectory="Always" />
+    <None Include="config.template.json" CopyToPublishDirectory="Always" />
+  </ItemGroup>
+
+</Project>
