@@ -7,18 +7,18 @@
     },
     "admin": {
         "access_log_path": "./log/sfreverseproxy.access_log.admin.log",
-        "address": "tcp://0.0.0.0:19990"
+        "address": "tcp://0.0.0.0:8001"
     },
     "cluster_manager": {
         "sds": {
             "cluster": {
                 "name": "sds",
-                "type": "static",
+                "type": "DISCOVERYTYPE",
                 "connect_timeout_ms": 5000,
                 "lb_type": "round_robin",
                 "hosts": [
                     {
-                        "url": "tcp://10.0.0.10:5559"
+                        "url": "RESOLVERURI"
                     }
                 ]
             },
@@ -27,23 +27,23 @@
       "clusters": [
         {
           "name": "lds",
-          "type": "static",
+          "type": "DISCOVERYTYPE",
           "connect_timeout_ms": 5000,
           "lb_type": "round_robin",
           "hosts": [
             {
-              "url": "tcp://10.0.0.10:5559"
+              "url": "RESOLVERURI"
             }
           ]
         },
         {
           "name": "rds",
-          "type": "static",
+          "type": "DISCOVERYTYPE",
           "connect_timeout_ms": 5000,
           "lb_type": "round_robin",
           "hosts": [
             {
-              "url": "tcp://10.0.0.10:5559"
+              "url": "RESOLVERURI"
             }
           ]
         }
@@ -53,10 +53,10 @@
                 "name": "cds",
                 "connect_timeout_ms": 5000,
                 "lb_type": "round_robin",
-                "type": "static",
+                "type": "DISCOVERYTYPE",
                 "hosts": [
                     {
-                        "url": "tcp://10.0.0.10:5559"
+                        "url": "RESOLVERURI"
                     }
                 ]
             },
