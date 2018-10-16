@@ -7,13 +7,13 @@
     },
     "admin": {
         "access_log_path": "./log/sfreverseproxy.access_log.admin.log",
-        "address": "tcp://0.0.0.0:8001"
+        "address": "tcp://0.0.0.0:19990"
     },
     "cluster_manager": {
         "sds": {
             "cluster": {
                 "name": "sds",
-                "type": "static",
+                "type": "DISCOVERYTYPE",
                 "connect_timeout_ms": 5000,
                 "lb_type": "round_robin",
                 "hosts": [
@@ -27,7 +27,7 @@
       "clusters": [
         {
           "name": "lds",
-          "type": "static",
+          "type": "DISCOVERYTYPE",
           "connect_timeout_ms": 5000,
           "lb_type": "round_robin",
           "hosts": [
@@ -38,7 +38,7 @@
         },
         {
           "name": "rds",
-          "type": "static",
+          "type": "DISCOVERYTYPE",
           "connect_timeout_ms": 5000,
           "lb_type": "round_robin",
           "hosts": [
@@ -53,7 +53,7 @@
                 "name": "cds",
                 "connect_timeout_ms": 5000,
                 "lb_type": "round_robin",
-                "type": "static",
+                "type": "DISCOVERYTYPE",
                 "hosts": [
                     {
                         "url": "tcp://127.0.0.1:5000"
