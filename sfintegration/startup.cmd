@@ -28,4 +28,4 @@ echo %ENVOYCMD%
 
 echo envoy exited. Sleeping ...
 
-powershell start-sleep 3600
+ping -n 3600 127.0.0.1 > nul

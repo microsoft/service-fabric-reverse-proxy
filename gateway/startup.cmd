@@ -1,22 +1,34 @@
-set path=%PATH%;%FabricCodePath%
-echo %PATH% > ./startup.log
+@echo off
+setlocal EnableExtensions EnableDelayedExpansion
 
-if exist "%Fabric_Folder_Application%\Resolver.Endpoints.txt" (
-for /f "tokens=4 delims=;" %%i in (%Fabric_Folder_Application%\Resolver.Endpoints.txt) do set Fabric_Endpoint_GatewayProxyResolverEndpoint=%%i
+if not exist .\log mkdir .\log
+set path=%PATH%;%FabricCodePath%
+
+echo Environment
+set
+echo.
+
+set Fabric_Endpoint_GatewayProxyResolverEndpoint=19079
+if not "Gateway_Resolver_Uses_Dynamic_Port" == "true" goto :skipDynamicPort
+:waitforendpointfile
+if not exist "%Fabric_Folder_Application%\Resolver.Endpoints.txt" (
+    ping -n 10 127.0.0.1 > nul
+    goto :waitforendpointfile
 )
 
-echo Fabric_Endpoint_GatewayProxyResolverEndpoint= >> ./startup.log
-echo %Fabric_Endpoint_GatewayProxyResolverEndpoint% >> ./startup.log
+if exist "%Fabric_Folder_Application%\Resolver.Endpoints.txt" (
+    for /f "tokens=4 delims=;" %%i in (%Fabric_Folder_Application%\Resolver.Endpoints.txt) do set Fabric_Endpoint_GatewayProxyResolverEndpoint=%%i
+)
+:skipDynamicPort
 
 echo Run startup to generate enoy config 
 startup.exe config.template.json config.gateway.json
 
-@echo on
-echo start envoy -c config.gateway.json --service-cluster reverse_proxy --service-node ingress_node -l debug  >> ./startup.log
-envoy -c config.gateway.json --service-cluster reverse_proxy --service-node ingress_node -l info
+set ENVOYCMD=envoy.exe -c config.gateway.json --service-cluster gateway_proxy --service-node ingress_node -l info
+echo %ENVOYCMD%
 
-if /i not "%GatewayMode%"=="true" (
-echo dotnet sfintegration.dll >> ./startup.log 2>&1
-dotnet sfintegration.dll >> ./startup.log 2>&1
-)
+%ENVOYCMD% 
 
+echo envoy exited. Sleeping ...
+
+ping -n 3600 127.0.0.1 > nul
