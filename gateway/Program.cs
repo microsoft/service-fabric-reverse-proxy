@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Net;
+using System.Net.NetworkInformation;
 
 namespace startup
 {
@@ -15,9 +17,53 @@ namespace startup
         public const string DiscoveryType_Static = "static";
         public const string DiscoveryType_LogicalDns = "logical_dns";
 
+        private static string fabricNodeIpOrFQDN;
+
+        private static string GetHostEntry(string hostname)
+        {
+            try
+            {
+                Console.WriteLine("Trying to get HostEntry for {0}", hostname);
+                IPHostEntry host = Dns.GetHostEntry(hostname);
+
+                Console.WriteLine("GetHostEntry({0}) returns:", hostname);
+
+                foreach (IPAddress address in host.AddressList)
+                {
+                    Console.WriteLine("    {0}", address.ToString());
+                }
+                return hostname;
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("Exception=    {0}", e.ToString());
+            }
+            return null;
+        }
+
+        private static string GetDNSResolveableHostName(string hostname)
+        {
+            foreach (NetworkInterface networkInterface in NetworkInterface.GetAllNetworkInterfaces())
+            {
+                if (string.IsNullOrWhiteSpace(networkInterface.GetIPProperties().DnsSuffix))
+                {
+                    continue;
+                }
+                var newHostName = hostname + "." + networkInterface.GetIPProperties().DnsSuffix;
+                if (GetHostEntry(newHostName) != null)
+                {
+                    Console.WriteLine("Reachable hostname: {0}", newHostName);
+                    return newHostName;
+                }
+            }
+
+            Console.WriteLine("Did not find a reachable hostname for: {0}", hostname);
+            return hostname;
+        }
+
         static string GetDiscoveryType()
         {
-            var fabricNodeIpOrFQDN = Environment.GetEnvironmentVariable(Env_Fabric_NodeIPOrFQDN);
+            fabricNodeIpOrFQDN = Environment.GetEnvironmentVariable(Env_Fabric_NodeIPOrFQDN);
             Console.WriteLine("Environment variable {0} = {1}", Env_Fabric_NodeIPOrFQDN, fabricNodeIpOrFQDN);
             var hostNameType = Uri.CheckHostName(fabricNodeIpOrFQDN);
             switch (hostNameType)
@@ -27,6 +73,10 @@ namespace startup
                     return DiscoveryType_Static;
 
                 case UriHostNameType.Dns:
+                    if (GetHostEntry(fabricNodeIpOrFQDN) == null)
+                    {
+                        fabricNodeIpOrFQDN = GetDNSResolveableHostName(fabricNodeIpOrFQDN);
+                    }
                     return DiscoveryType_LogicalDns;
 
                 default:
@@ -36,7 +86,6 @@ namespace startup
 
         static string GetResolverURI()
         {
-            var fabricNodeIpOrFQDN = Environment.GetEnvironmentVariable(Env_Fabric_NodeIPOrFQDN);
             var gatewayMode = Environment.GetEnvironmentVariable(Env_GatewayMode);
             var proxyResolverEndpointPort = Environment.GetEnvironmentVariable(Env_Fabric_Endpoint_GatewayProxyResolverEndpoint);
             var isDynamicPortResolver = Environment.GetEnvironmentVariable(Env_Gateway_Resolver_Uses_Dynamic_Port);
