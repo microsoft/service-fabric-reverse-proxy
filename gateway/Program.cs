@@ -19,24 +19,52 @@ namespace startup
 
         private static string fabricNodeIpOrFQDN;
 
+        private static int indentLevel = 0;
+        private static string indentSpaces = "";
+
+        public enum IndentOperation
+        {
+            NoChange,
+            BeginLevel,
+            EndLevel
+        }
+
+        public static void LogMessage(string message, IndentOperation indentOp = IndentOperation.NoChange)
+        {
+            if (indentOp == IndentOperation.EndLevel)
+            {
+                indentLevel--;
+                if (indentLevel < 0) indentLevel = 0;
+                indentSpaces = new string(' ', indentLevel * 2);
+            }
+            // Get the local time zone and the current local time and year.
+            DateTime currentDate = DateTime.UtcNow;
+            System.Console.WriteLine("[{0}][info][startup] {2}{1}", currentDate.ToString("yyyy-MM-dd HH:mm:ss.fffZ"), message, indentSpaces);
+            if (indentOp == IndentOperation.BeginLevel)
+            {
+                indentLevel++;
+                indentSpaces = new string(' ', indentLevel * 2);
+            }
+        }
+
         private static string GetHostEntry(string hostname)
         {
             try
             {
-                Console.WriteLine("Trying to get HostEntry for {0}", hostname);
+                LogMessage(string.Format("Trying to get HostEntry for {0}", hostname));
                 IPHostEntry host = Dns.GetHostEntry(hostname);
 
-                Console.WriteLine("GetHostEntry({0}) returns:", hostname);
+                LogMessage(string.Format("GetHostEntry({0}) returns:", hostname));
 
                 foreach (IPAddress address in host.AddressList)
                 {
-                    Console.WriteLine("    {0}", address.ToString());
+                    LogMessage(string.Format("    {0}", address.ToString()));
                 }
                 return hostname;
             }
             catch (Exception e)
             {
-                Console.WriteLine("Exception=    {0}", e.ToString());
+                LogMessage(string.Format("Exception=    {0}", e.ToString()));
             }
             return null;
         }
@@ -52,19 +80,19 @@ namespace startup
                 var newHostName = hostname + "." + networkInterface.GetIPProperties().DnsSuffix;
                 if (GetHostEntry(newHostName) != null)
                 {
-                    Console.WriteLine("Reachable hostname: {0}", newHostName);
+                    LogMessage(string.Format("Reachable hostname: {0}", newHostName));
                     return newHostName;
                 }
             }
 
-            Console.WriteLine("Did not find a reachable hostname for: {0}", hostname);
+            LogMessage(string.Format("Did not find a reachable hostname for: {0}", hostname));
             return hostname;
         }
 
         static string GetDiscoveryType()
         {
             fabricNodeIpOrFQDN = Environment.GetEnvironmentVariable(Env_Fabric_NodeIPOrFQDN);
-            Console.WriteLine("Environment variable {0} = {1}", Env_Fabric_NodeIPOrFQDN, fabricNodeIpOrFQDN);
+            LogMessage(string.Format("Environment variable {0} = {1}", Env_Fabric_NodeIPOrFQDN, fabricNodeIpOrFQDN));
             var hostNameType = Uri.CheckHostName(fabricNodeIpOrFQDN);
             switch (hostNameType)
             {
@@ -91,14 +119,14 @@ namespace startup
             var isDynamicPortResolver = Environment.GetEnvironmentVariable(Env_Gateway_Resolver_Uses_Dynamic_Port);
 
 
-            Console.WriteLine("Environment variable {0} = {1}", Env_Fabric_NodeIPOrFQDN, fabricNodeIpOrFQDN);
-            Console.WriteLine("Environment variable {0} = {1}", Env_Fabric_Endpoint_GatewayProxyResolverEndpoint, proxyResolverEndpointPort);
-            Console.WriteLine("Environment variable {0} = {1}", Env_GatewayMode, gatewayMode);
-            Console.WriteLine("Environment variable {0} = {1}", Env_Gateway_Resolver_Uses_Dynamic_Port, isDynamicPortResolver);
+            LogMessage(string.Format("Environment variable {0} = {1}", Env_Fabric_NodeIPOrFQDN, fabricNodeIpOrFQDN));
+            LogMessage(string.Format("Environment variable {0} = {1}", Env_Fabric_Endpoint_GatewayProxyResolverEndpoint, proxyResolverEndpointPort));
+            LogMessage(string.Format("Environment variable {0} = {1}", Env_GatewayMode, gatewayMode));
+            LogMessage(string.Format("Environment variable {0} = {1}", Env_Gateway_Resolver_Uses_Dynamic_Port, isDynamicPortResolver));
 
             if (!Convert.ToBoolean(gatewayMode))
             {
-                Console.WriteLine("Proxy not running in GatewayMode. Use local resolver {0}", LocalProxyResolverURI);
+                LogMessage(string.Format("Proxy not running in GatewayMode. Use local resolver {0}", LocalProxyResolverURI));
                 return LocalProxyResolverURI;
             }
 
@@ -118,7 +146,7 @@ namespace startup
             string discoveryType = GetDiscoveryType();
             string resolverUri = GetResolverURI();
 
-            Console.WriteLine("discovery type: {0}, resolver URI: {1}", discoveryType, resolverUri);
+            LogMessage(string.Format("discovery type: {0}, resolver URI: {1}", discoveryType, resolverUri));
             fileContents = fileContents.Replace("DISCOVERYTYPE", discoveryType);
             fileContents = fileContents.Replace("RESOLVERURI", resolverUri);
 
@@ -129,7 +157,7 @@ namespace startup
         {
             if (args.Length != 2)
             {
-                Console.WriteLine("syntax: UpdateConfig.exe confile_template_file output_config_file");
+                LogMessage(string.Format("syntax: UpdateConfig.exe confile_template_file output_config_file"));
                 return 0;
             }
 
