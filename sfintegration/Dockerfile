@@ -18,4 +18,5 @@ WORKDIR /app
 COPY Third-Party-Notices.txt /
 COPY . /app
 RUN chmod 755 startup.sh
+RUN date > imagecreationtime.txt
 CMD ./startup.sh

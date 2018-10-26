@@ -10,6 +10,7 @@ timestamperror() {
   echo [$(date +"%Y-%m-%d %H:%M:%S.%3N%Z")][error][startup.sh]
 }
 
+cat imagecreationtime.txt
 if [ "${Fabric_Folder_App_Log}" == "" ]
 then
     Fabric_Folder_App_Log=./log
