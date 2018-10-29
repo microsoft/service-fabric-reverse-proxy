@@ -42,6 +42,8 @@ docker tag $BRANCH/service-fabric-reverse-proxy:$TAG $BRANCH/service-fabric-reve
 echo $DOCKER_PASSWORD | docker login -u="$DOCKER_USERNAME" --password-stdin
 echo docker push $BRANCH/service-fabric-reverse-proxy:$TAG
 docker push $BRANCH/service-fabric-reverse-proxy:$TAG
+echo docker push $BRANCH/service-fabric-reverse-proxy:0.20.0
+docker push $BRANCH/service-fabric-reverse-proxy:0.20.0
 echo docker push $BRANCH/service-fabric-reverse-proxy:xenial-$TAG
 docker push $BRANCH/service-fabric-reverse-proxy:xenial-$TAG
 echo docker push $BRANCH/service-fabric-reverse-proxy:latest
