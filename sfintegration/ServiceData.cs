@@ -185,31 +185,31 @@ namespace webapi
                 fabricUri = null;
             }
 
-            LogMessage(String.Format("Management Endpoint={0}:{1}", host_ip, management_port));
+            LogMessage(String.Format("Management Endpoint = {0}:{1}", host_ip, management_port));
             if (fabricUri != null)
             {
-                LogMessage(String.Format("Fabric Uri ={0}", fabricUri));
+                LogMessage(String.Format("Fabric Uri = {0}", fabricUri));
             }
             else
             {
-                LogMessage(String.Format("Fabric Uri =[]"));
+                LogMessage(String.Format("Fabric Uri = []"));
             }
 
             if (client_cert_subject_name != null)
             {
-                LogMessage(String.Format("SF_ClientCertCommonName={0}", client_cert_subject_name));
+                LogMessage(String.Format("SF_ClientCertCommonName = {0}", client_cert_subject_name));
             }
             if (issuer_thumbprints != null)
             {
-                LogMessage(String.Format("SF_ClientCertIssuerThumbprints={0}", issuer_thumbprints));
+                LogMessage(String.Format("SF_ClientCertIssuerThumbprints = {0}", issuer_thumbprints));
             }
             if (server_cert_common_names != null)
             {
-                LogMessage(String.Format("SF_ClusterCertCommonNames={0}", server_cert_common_names));
+                LogMessage(String.Format("SF_ClusterCertCommonNames = {0}", server_cert_common_names));
             }
             if (server_issuer_thumbprints != null)
             {
-                LogMessage(String.Format("  ={0}", server_issuer_thumbprints));
+                LogMessage(String.Format("SF_ClientCertIssuerThumbprints = {0}", server_issuer_thumbprints));
             }
 
             var gateway_listen_network = "";
@@ -217,13 +217,15 @@ namespace webapi
             string gateway_config = Environment.GetEnvironmentVariable("Gateway_Config");
             if (gateway_config != null && gateway_config != "")
             {
-                LogMessage(String.Format("Gateway_Config={0}", gateway_config));
+                LogMessage(String.Format("Gateway_Config = {0}", gateway_config));
                 var gatewayProperties = JsonConvert.DeserializeObject<GatewayResourceDescription>(gateway_config);
 
+                LogMessage(String.Format("Gateway_Config: Deserialized"));
                 gateway_listen_network = gatewayProperties.SourceNetwork.Name;
 
                 gateway_map = new Dictionary<string, List<ListenerFilterConfig>>();
                 gateway_clusternames = new HashSet<string>();
+                LogMessage(String.Format("Gateway_Config: Start processing"));
                 if (gatewayProperties.Tcp != null)
                 {
                     foreach (var e in gatewayProperties.Tcp)
@@ -267,13 +269,14 @@ namespace webapi
                         }
                     }
                 }
+                LogMessage(String.Format("Gateway_Config: End processing"));
             }
             else
                 LogMessage("Gateway_Config=null");
 
             if (gateway_listen_network != null)
             {
-                LogMessage(String.Format("Gateway_Listen_Network={0}", gateway_listen_network));
+                LogMessage(String.Format("Gateway_Listen_Network = {0}", gateway_listen_network));
                 gateway_listen_network = "[" + gateway_listen_network + "]";
                 var env = Environment.GetEnvironmentVariables();
                 var keys = env.Keys;
@@ -290,7 +293,7 @@ namespace webapi
             else
                 LogMessage("Gateway_Listen_Network=null");
 
-            LogMessage("gateway_listen_ip=" + gateway_listen_ip);
+            LogMessage("gateway_listen_ip = " + gateway_listen_ip);
         }
         private static string GetInternalGatewayAddress()
         {
@@ -502,7 +505,7 @@ namespace webapi
             {
                 partitions_ = null;
 
-                if (!string.IsNullOrWhiteSpace(EnvoyDefaults.client_cert_subject_name) || 
+                if (!string.IsNullOrWhiteSpace(EnvoyDefaults.client_cert_subject_name) ||
                     EnvoyDefaults.client_cert_issuer_thumbprints != null)
                 {
                     EnvoyDefaults.LogMessage("Client: Creating, secure");
@@ -554,12 +557,15 @@ namespace webapi
                     creds.StoreLocation = StoreLocation.LocalMachine;
                     creds.StoreName = "/var/lib/sfcerts";
 
+                    EnvoyDefaults.LogMessage("Client: Start Create, secure");
                     client = new FabricClient(creds, EnvoyDefaults.fabricUri);
+                    EnvoyDefaults.LogMessage("Client: End Create, secure");
                 }
                 else
                 {
-                        EnvoyDefaults.LogMessage("Client: Creating, nonsecure");
-                        client = new FabricClient(EnvoyDefaults.fabricUri);
+                    EnvoyDefaults.LogMessage("Client: Creating, nonsecure");
+                    client = new FabricClient(EnvoyDefaults.fabricUri);
+                    EnvoyDefaults.LogMessage("Client: End Create, nonsecure");
                 }
                 EnvoyDefaults.LogMessage("Client sucessfully created");
 
@@ -568,7 +574,7 @@ namespace webapi
             }
             catch (Exception e)
             {
-                EnvoyDefaults.LogMessage(String.Format("Error={0}", e));
+                EnvoyDefaults.LogMessage(String.Format("Error = {0}", e));
             }
         }
 
@@ -601,7 +607,7 @@ namespace webapi
 
         private static void AddPartitionToService(Guid partitionId, SF_Partition partitionInfo)
         {
-            EnvoyDefaults.LogMessage(String.Format("Added: {0}={1}", partitionId,
+            EnvoyDefaults.LogMessage(String.Format("Added: {0} = {1}", partitionId,
                 JsonConvert.SerializeObject(partitionInfo)));
             for (int listenerIndex = 0; listenerIndex < partitionInfo.listeners_.Count; listenerIndex++)
             {
@@ -653,7 +659,7 @@ namespace webapi
                 ServiceEndpointRole role = ServiceEndpointRole.Invalid;
                 EnvoyDefaults.LogMessage(String.Format("{0}: Start Enumerating Replicas", notification.PartitionId),
                     EnvoyDefaults.IndentOperation.BeginLevel);
-                EnvoyDefaults.LogMessage(String.Format("{0}: Replica Count = {1}", notification.PartitionId, 
+                EnvoyDefaults.LogMessage(String.Format("{0}: Replica Count = {1}", notification.PartitionId,
                     notification.Endpoints.Count()));
                 foreach (var notificationEndpoint in notification.Endpoints)
                 {
@@ -710,7 +716,7 @@ namespace webapi
                         }
                         catch (System.Exception e)
                         {
-                            EnvoyDefaults.LogMessage(String.Format("Error={0}", e));
+                            EnvoyDefaults.LogMessage(String.Format("Error = {0}", e));
                         }
                     }
                     if (role == ServiceEndpointRole.Invalid)
@@ -753,8 +759,8 @@ namespace webapi
             }
             catch (Exception e)
             {
-                EnvoyDefaults.LogMessage(String.Format("Error={0}", e.Message));
-                EnvoyDefaults.LogMessage(String.Format("Error={0}", e.StackTrace));
+                EnvoyDefaults.LogMessage(String.Format("Error = {0}", e.Message));
+                EnvoyDefaults.LogMessage(String.Format("Error = {0}", e.StackTrace));
             }
             EnvoyDefaults.LogMessage("Notification Handler: End", EnvoyDefaults.IndentOperation.EndLevel);
         }
@@ -783,8 +789,8 @@ namespace webapi
             catch (Exception e)
             {
                 EnvoyDefaults.LogMessage("GetApplicationListAsync: Failed");
-                EnvoyDefaults.LogMessage(String.Format("Error={0}", e.Message));
-                EnvoyDefaults.LogMessage(String.Format("Error={0}", e.StackTrace));
+                EnvoyDefaults.LogMessage(String.Format("Error = {0}", e.Message));
+                EnvoyDefaults.LogMessage(String.Format("Error = {0}", e.StackTrace));
                 Environment.FailFast("GetApplicationListAsync failed");
             }
             EnvoyDefaults.LogMessage("GetApplicationListAsync: Succeeded");
@@ -792,7 +798,7 @@ namespace webapi
             EnvoyDefaults.LogMessage("Start Enumerating Applications", EnvoyDefaults.IndentOperation.BeginLevel);
             foreach (var application in applications)
             {
-                EnvoyDefaults.LogMessage(String.Format("{0}: Start Enumerating Services", application.ApplicationName), 
+                EnvoyDefaults.LogMessage(String.Format("{0}: Start Enumerating Services", application.ApplicationName),
                     EnvoyDefaults.IndentOperation.BeginLevel);
                 var services = await queryManager.GetServiceListAsync(application.ApplicationName);
                 EnvoyDefaults.LogMessage(String.Format("{0}: Service Count = {1}", application.ApplicationName, services.Count()));
@@ -882,7 +888,7 @@ namespace webapi
                                 }
                                 catch (System.Exception e)
                                 {
-                                    EnvoyDefaults.LogMessage(String.Format("Error={0}", e));
+                                    EnvoyDefaults.LogMessage(String.Format("Error = {0}", e));
                                 }
                             }
                             EnvoyDefaults.LogMessage(String.Format("{0}: End Enumerating Replicas", partition.PartitionInformation.Id),
@@ -930,7 +936,7 @@ namespace webapi
                 foreach (var partition in partitionData)
                 {
                     AddPartitionToService(partition.Key, partition.Value);
-                    EnvoyDefaults.LogMessage(String.Format("Added: {0}={1}", partition.Key,
+                    EnvoyDefaults.LogMessage(String.Format("Added: {0} = {1}", partition.Key,
                         JsonConvert.SerializeObject(partition.Value)));
                 }
 
