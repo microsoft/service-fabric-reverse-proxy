@@ -7,6 +7,10 @@
     <RuntimeIdentifier>win10-x64</RuntimeIdentifier>
   </PropertyGroup>
 
+  <PropertyGroup >
+    <DefineConstants Condition="'$(deploy_environment)'=='Mesh_Development'">$(DefineConstants);DEVELOPMENT_ENVIRONMENT</DefineConstants>
+  </PropertyGroup>
+
   <ItemGroup>
     <None Include="../Third-Party-Notices.txt" CopyToPublishDirectory="Always" />
     <None Include="startup.cmd" CopyToPublishDirectory="Always" />

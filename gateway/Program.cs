@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Net;
 using System.Net.NetworkInformation;
+using System.Net.Sockets;
+using System.Threading.Tasks;
 
 namespace startup
 {
@@ -16,8 +18,14 @@ namespace startup
 
         public const string DiscoveryType_Static = "static";
         public const string DiscoveryType_LogicalDns = "logical_dns";
+        public static readonly TimeSpan EndpointConnectTimeout = TimeSpan.FromSeconds(5);
+        public const int ConnectRetryCount = 10;
+        public static readonly TimeSpan DelayBetweenRetry = TimeSpan.FromSeconds(10);
 
         private static string fabricNodeIpOrFQDN;
+        private static string gatewayMode;
+        private static string proxyResolverEndpointPort;
+        private static string isDynamicPortResolver;
 
         private static int indentLevel = 0;
         private static string indentSpaces = "";
@@ -86,13 +94,66 @@ namespace startup
             }
 
             LogMessage(string.Format("Did not find a reachable hostname for: {0}", hostname));
+#if (DEVELOPMENT_ENVIRONMENT)
+            return null;
+#else
             return hostname;
+#endif
+        }
+
+        static string GetReachableIPAddress()
+        {
+            var resolverPort = int.Parse(proxyResolverEndpointPort);
+            for (int i = 0; i < ConnectRetryCount; i++)
+            {
+                foreach (NetworkInterface networkInterface in NetworkInterface.GetAllNetworkInterfaces())
+                {
+                    foreach (var address in networkInterface.GetIPProperties().GatewayAddresses)
+                    {
+                        if (IPAddress.IsLoopback(address.Address) || address.Address.AddressFamily != AddressFamily.InterNetwork)
+                        {
+                            continue;
+                        }
+
+                        LogMessage(string.Format("Trying to connect to : {0}:{1}",
+                            address.Address.ToString(),
+                            proxyResolverEndpointPort));
+
+                        Socket s = new Socket(
+                            AddressFamily.InterNetwork,
+                            SocketType.Stream,
+                            ProtocolType.Tcp);
+                        try
+                        {
+                            IAsyncResult result = s.BeginConnect(address.Address.ToString(), resolverPort, null, null);
+                            result.AsyncWaitHandle.WaitOne(EndpointConnectTimeout, true);
+
+                            if (s.Connected)
+                            {
+                                LogMessage(string.Format("Sucessfully connected : {0}:{1}",
+                                    address.Address.ToString(),
+                                    proxyResolverEndpointPort));
+
+                                s.Close();
+                                s = null;
+
+                                return address.Address.ToString();
+                            }
+                        }
+                        catch (Exception)
+                        {
+                        }
+                    }
+                }
+                Task.Delay(DelayBetweenRetry);
+            }
+
+            LogMessage(string.Format("Did not find a reachable IP for: {0}", fabricNodeIpOrFQDN));
+            return null;
         }
 
         static string GetDiscoveryType()
         {
-            fabricNodeIpOrFQDN = Environment.GetEnvironmentVariable(Env_Fabric_NodeIPOrFQDN);
-            LogMessage(string.Format("Environment variable {0} = {1}", Env_Fabric_NodeIPOrFQDN, fabricNodeIpOrFQDN));
             var hostNameType = Uri.CheckHostName(fabricNodeIpOrFQDN);
             switch (hostNameType)
             {
@@ -103,7 +164,22 @@ namespace startup
                 case UriHostNameType.Dns:
                     if (GetHostEntry(fabricNodeIpOrFQDN) == null)
                     {
-                        fabricNodeIpOrFQDN = GetDNSResolveableHostName(fabricNodeIpOrFQDN);
+                        var hostname = fabricNodeIpOrFQDN = GetDNSResolveableHostName(fabricNodeIpOrFQDN);
+                        if (hostname != null)
+                        {
+                            fabricNodeIpOrFQDN = hostname;
+                            return DiscoveryType_LogicalDns;
+                        }
+                    }
+
+                    // Cannot use DNS
+                    // Let's try and check if we can reach the end point on one of the
+                    // network's Default Gateway IPs
+                    var ipAddress = GetReachableIPAddress();
+                    if (ipAddress != null)
+                    {
+                        fabricNodeIpOrFQDN = ipAddress;
+                        return DiscoveryType_Static;
                     }
                     return DiscoveryType_LogicalDns;
 
@@ -114,16 +190,6 @@ namespace startup
 
         static string GetResolverURI()
         {
-            var gatewayMode = Environment.GetEnvironmentVariable(Env_GatewayMode);
-            var proxyResolverEndpointPort = Environment.GetEnvironmentVariable(Env_Fabric_Endpoint_GatewayProxyResolverEndpoint);
-            var isDynamicPortResolver = Environment.GetEnvironmentVariable(Env_Gateway_Resolver_Uses_Dynamic_Port);
-
-
-            LogMessage(string.Format("Environment variable {0} = {1}", Env_Fabric_NodeIPOrFQDN, fabricNodeIpOrFQDN));
-            LogMessage(string.Format("Environment variable {0} = {1}", Env_Fabric_Endpoint_GatewayProxyResolverEndpoint, proxyResolverEndpointPort));
-            LogMessage(string.Format("Environment variable {0} = {1}", Env_GatewayMode, gatewayMode));
-            LogMessage(string.Format("Environment variable {0} = {1}", Env_Gateway_Resolver_Uses_Dynamic_Port, isDynamicPortResolver));
-
             if (!Convert.ToBoolean(gatewayMode))
             {
                 LogMessage(string.Format("Proxy not running in GatewayMode. Use local resolver {0}", LocalProxyResolverURI));
@@ -155,13 +221,31 @@ namespace startup
 
         static int Main(string[] args)
         {
+#if (DEVELOPMENT_ENVIRONMENT)
+            LogMessage("Development environment");
+#else
+            LogMessage("Mesh environment");
+#endif
+
             if (args.Length != 2)
             {
                 LogMessage(string.Format("syntax: UpdateConfig.exe confile_template_file output_config_file"));
                 return 0;
             }
 
+            fabricNodeIpOrFQDN = Environment.GetEnvironmentVariable(Env_Fabric_NodeIPOrFQDN);
+            gatewayMode = Environment.GetEnvironmentVariable(Env_GatewayMode);
+            proxyResolverEndpointPort = Environment.GetEnvironmentVariable(Env_Fabric_Endpoint_GatewayProxyResolverEndpoint);
+            isDynamicPortResolver = Environment.GetEnvironmentVariable(Env_Gateway_Resolver_Uses_Dynamic_Port);
+
+            LogMessage(string.Format("Environment variable {0} = {1}", Env_Fabric_NodeIPOrFQDN, fabricNodeIpOrFQDN));
+            LogMessage(string.Format("Environment variable {0} = {1}", Env_Fabric_Endpoint_GatewayProxyResolverEndpoint, proxyResolverEndpointPort));
+            LogMessage(string.Format("Environment variable {0} = {1}", Env_GatewayMode, gatewayMode));
+            LogMessage(string.Format("Environment variable {0} = {1}", Env_Gateway_Resolver_Uses_Dynamic_Port, isDynamicPortResolver));
+
+
             Program.ReplaceContents(args[0], args[1]);
+
             return 1;
         }
     }
