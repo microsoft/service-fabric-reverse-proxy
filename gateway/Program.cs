@@ -81,11 +81,20 @@ namespace startup
         {
             foreach (NetworkInterface networkInterface in NetworkInterface.GetAllNetworkInterfaces())
             {
-                if (string.IsNullOrWhiteSpace(networkInterface.GetIPProperties().DnsSuffix))
+                var dnsSuffix = networkInterface.GetIPProperties().DnsSuffix;
+                if (string.IsNullOrWhiteSpace(dnsSuffix))
                 {
                     continue;
                 }
-                var newHostName = hostname + "." + networkInterface.GetIPProperties().DnsSuffix;
+
+                if (hostname.EndsWith(dnsSuffix))
+                {
+                    // We have a hostname that matches one of the DNS suffix. 
+                    // Don't try appending other suffixes and resolve
+                    break;
+                }
+                
+                var newHostName = hostname + "." + dnsSuffix;
                 if (GetHostEntry(newHostName) != null)
                 {
                     LogMessage(string.Format("Reachable hostname: {0}", newHostName));
@@ -144,8 +153,8 @@ namespace startup
                         {
                         }
                     }
+                    Task.Delay(DelayBetweenRetry);
                 }
-                Task.Delay(DelayBetweenRetry);
             }
 
             LogMessage(string.Format("Did not find a reachable IP for: {0}", fabricNodeIpOrFQDN));
@@ -164,7 +173,7 @@ namespace startup
                 case UriHostNameType.Dns:
                     if (GetHostEntry(fabricNodeIpOrFQDN) == null)
                     {
-                        var hostname = fabricNodeIpOrFQDN = GetDNSResolveableHostName(fabricNodeIpOrFQDN);
+                        var hostname = GetDNSResolveableHostName(fabricNodeIpOrFQDN);
                         if (hostname != null)
                         {
                             fabricNodeIpOrFQDN = hostname;
@@ -242,7 +251,6 @@ namespace startup
             LogMessage(string.Format("Environment variable {0} = {1}", Env_Fabric_Endpoint_GatewayProxyResolverEndpoint, proxyResolverEndpointPort));
             LogMessage(string.Format("Environment variable {0} = {1}", Env_GatewayMode, gatewayMode));
             LogMessage(string.Format("Environment variable {0} = {1}", Env_Gateway_Resolver_Uses_Dynamic_Port, isDynamicPortResolver));
-
 
             Program.ReplaceContents(args[0], args[1]);
 
