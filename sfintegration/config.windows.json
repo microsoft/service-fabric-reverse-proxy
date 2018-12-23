@@ -6,6 +6,11 @@
                 {
                     "name": "http_connection_manager",
                     "config": {
+                        "access_log": [
+                            {
+                                "path": "./log/sfreverseproxy.access_log.log"
+                            }
+                        ],
                         "codec_type": "auto",
                         "stat_prefix": "reverse_proxy_http",
                         "rds": {
@@ -26,7 +31,7 @@
         }
     ],
     "admin": {
-        "access_log_path": "./admin.log",
+        "access_log_path": "./log/sfreverseproxy.access_log.admin.log",
         "address": "tcp://0.0.0.0:8001"
     },
     "cluster_manager": {

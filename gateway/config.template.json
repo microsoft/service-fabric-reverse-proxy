@@ -13,12 +13,12 @@
         "sds": {
             "cluster": {
                 "name": "sds",
-                "type": "static",
+                "type": "DISCOVERYTYPE",
                 "connect_timeout_ms": 5000,
                 "lb_type": "round_robin",
                 "hosts": [
                     {
-                        "url": "tcp://127.0.0.1:5000"
+                        "url": "RESOLVERURI"
                     }
                 ]
             },
@@ -27,23 +27,23 @@
       "clusters": [
         {
           "name": "lds",
-          "type": "static",
+          "type": "DISCOVERYTYPE",
           "connect_timeout_ms": 5000,
           "lb_type": "round_robin",
           "hosts": [
             {
-                "url": "tcp://127.0.0.1:5000"
+              "url": "RESOLVERURI"
             }
           ]
         },
         {
           "name": "rds",
-          "type": "static",
+          "type": "DISCOVERYTYPE",
           "connect_timeout_ms": 5000,
           "lb_type": "round_robin",
           "hosts": [
             {
-                "url": "tcp://127.0.0.1:5000"
+              "url": "RESOLVERURI"
             }
           ]
         }
@@ -53,10 +53,10 @@
                 "name": "cds",
                 "connect_timeout_ms": 5000,
                 "lb_type": "round_robin",
-                "type": "static",
+                "type": "DISCOVERYTYPE",
                 "hosts": [
                     {
-                        "url": "tcp://127.0.0.1:5000"
+                        "url": "RESOLVERURI"
                     }
                 ]
             },

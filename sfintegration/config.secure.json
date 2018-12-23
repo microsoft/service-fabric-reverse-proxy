@@ -9,7 +9,7 @@
                     "config": {
                         "access_log": [
                             {
-                                "path": "/var/log/sfreverseproxy/request.log"
+                                "path": "./log/sfreverseproxy.access_log.log"
                             }
                         ],
                         "codec_type": "auto",
@@ -36,7 +36,7 @@
         }
     ],
     "admin": {
-        "access_log_path": "/var/log/sfreverseproxy/admin.log",
+        "access_log_path": "./log/sfreverseproxy.access_log.admin.log",
         "address": "tcp://0.0.0.0:8001"
     },
     "cluster_manager": {

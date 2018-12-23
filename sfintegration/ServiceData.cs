@@ -1,4 +1,10 @@
-﻿using System;
+// ------------------------------------------------------------
+//  Copyright (c) Microsoft Corporation.  All rights reserved.
+//  Licensed under the MIT License (MIT). See License.txt in 
+//  the repo root for license information.
+// ------------------------------------------------------------
+
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -7,63 +13,75 @@ using System.Fabric.Query;
 using Newtonsoft.Json.Linq;
 using ServiceFabric.Helpers;
 using Newtonsoft.Json;
-using System.IO;
 using System.Net.NetworkInformation;
 using System.Net;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Runtime.InteropServices;
+using Gateway.Models;
+using sfintegration.envoymodels;
 
 namespace webapi
 {
-    public class cluster_ssl_context
+
+    public class ListenerFilterConfig
     {
-        static string ca_cert_file_path = "/var/lib/sfreverseproxycerts/servicecacert.pem";
-        public cluster_ssl_context(string verify_certificate_hash, List<string> verify_subject_alt_name)
+        public enum ListenerFilterType
         {
-            this.verify_certificate_hash = verify_certificate_hash;
-            this.verify_subject_alt_name = verify_subject_alt_name;
-            if (File.Exists(ca_cert_file_path)) // change to check for existance of file
-            {
-                ca_cert_file = ca_cert_file_path;
-            }
+            Tcp,
+            Http
         }
 
-        [JsonProperty]
-        public string cert_chain_file = "/var/lib/sfreverseproxycerts/reverseproxycert.pem";
-
-        [JsonProperty]
-        public string private_key_file = "/var/lib/sfreverseproxycerts/reverseproxykey.pem";
-
-        [JsonProperty]
-        public string verify_certificate_hash;
-        public bool ShouldSerializeverify_certificate_hash()
+        public ListenerFilterConfig(string name, ListenerFilterType type, string clusterName)
         {
-            return verify_certificate_hash != null;
+            Name = name;
+            Type = type;
+            ClusterName = clusterName;
         }
 
-        [JsonProperty]
-        public List<string> verify_subject_alt_name;
-        public bool ShouldSerializeverify_subject_alt_name()
+        public string Name { get; private set; }
+        public ListenerFilterType Type { get; private set; }
+
+        public string ClusterName { get; private set; }
+    }
+
+    public class ListenerHttpFilterConfig : ListenerFilterConfig
+    {
+        public ListenerHttpFilterConfig(string name, string clusterName, IList<HttpHostNameConfig> hosts)
+            : base(name, ListenerFilterConfig.ListenerFilterType.Http, clusterName)
         {
-            return verify_subject_alt_name != null && verify_subject_alt_name.Count != 0;
+            Hosts = hosts;
         }
 
-        [JsonProperty]
-        public string ca_cert_file;
-        public bool ShouldSerializeca_cert_file()
-        {
-            return ca_cert_file != null;
-        }
+        public IList<HttpHostNameConfig> Hosts { get; private set; }
     }
 
     public class EnvoyDefaults
     {
-        public static void LogMessage(string message)
+        private static int indentLevel = 0;
+        private static string indentSpaces = "";
+        public enum IndentOperation
         {
+            NoChange,
+            BeginLevel,
+            EndLevel
+        }
+        public static void LogMessage(string message, IndentOperation indentOp = IndentOperation.NoChange)
+        {
+            if (indentOp == IndentOperation.EndLevel)
+            {
+                indentLevel--;
+                if (indentLevel < 0) indentLevel = 0;
+                indentSpaces = new string(' ', indentLevel * 2);
+            }
             // Get the local time zone and the current local time and year.
-            DateTime currentDate = DateTime.Now;
-            System.Console.WriteLine("{0}, {1}", currentDate.ToString("O"), message);
+            DateTime currentDate = DateTime.UtcNow;
+            System.Console.WriteLine("[{0}][info][sfintegration] {2}{1}", currentDate.ToString("yyyy-MM-dd HH:mm:ss.fffZ"), message, indentSpaces);
+            if (indentOp == IndentOperation.BeginLevel)
+            {
+                indentLevel++;
+                indentSpaces = new string(' ', indentLevel * 2);
+            }
         }
         static EnvoyDefaults()
         {
@@ -111,7 +129,7 @@ namespace webapi
                     }
                     catch { }
                 }
-                cluster_ssl_context = new cluster_ssl_context(verify_certificate_hash, verify_subject_alt_name);
+                cluster_ssl_context = new EnvoyClusterSslContext(verify_certificate_hash, verify_subject_alt_name);
             }
 
             host_ip = Environment.GetEnvironmentVariable("Fabric_NodeIPOrFQDN");
@@ -143,17 +161,17 @@ namespace webapi
 
             client_cert_subject_name = Environment.GetEnvironmentVariable("SF_ClientCertCommonName");
             var issuer_thumbprints = Environment.GetEnvironmentVariable("SF_ClientCertIssuerThumbprints");
-            if (issuer_thumbprints != null)
+            if (!string.IsNullOrWhiteSpace(issuer_thumbprints))
             {
                 client_cert_issuer_thumbprints = issuer_thumbprints.Split(',');
             }
             var server_common_names = Environment.GetEnvironmentVariable("SF_ClusterCertCommonNames");
-            if (server_common_names != null)
+            if (!string.IsNullOrWhiteSpace(server_common_names))
             {
                 server_cert_common_names = server_common_names.Split(',');
             }
             var server_issuer_thumbprints = Environment.GetEnvironmentVariable("SF_ClusterCertIssuerThumbprints");
-            if (server_issuer_thumbprints != null)
+            if (!string.IsNullOrWhiteSpace(server_issuer_thumbprints))
             {
                 server_cert_issuer_thumbprints = server_issuer_thumbprints.Split(',');
             }
@@ -167,61 +185,115 @@ namespace webapi
                 fabricUri = null;
             }
 
-            LogMessage(String.Format("Management Endpoint={0}:{1}", host_ip, management_port));
+            LogMessage(String.Format("Management Endpoint = {0}:{1}", host_ip, management_port));
             if (fabricUri != null)
             {
-                LogMessage(String.Format("Fabric Uri ={0}", fabricUri));
+                LogMessage(String.Format("Fabric Uri = {0}", fabricUri));
             }
             else
             {
-                LogMessage(String.Format("Fabric Uri =[]"));
+                LogMessage(String.Format("Fabric Uri = []"));
             }
 
             if (client_cert_subject_name != null)
             {
-                LogMessage(String.Format("SF_ClientCertCommonName={0}", client_cert_subject_name));
+                LogMessage(String.Format("SF_ClientCertCommonName = {0}", client_cert_subject_name));
             }
             if (issuer_thumbprints != null)
             {
-                LogMessage(String.Format("SF_ClientCertIssuerThumbprints={0}", issuer_thumbprints));
+                LogMessage(String.Format("SF_ClientCertIssuerThumbprints = {0}", issuer_thumbprints));
             }
             if (server_cert_common_names != null)
             {
-                LogMessage(String.Format("SF_ClusterCertCommonNames={0}", server_cert_common_names));
+                LogMessage(String.Format("SF_ClusterCertCommonNames = {0}", server_cert_common_names));
             }
             if (server_issuer_thumbprints != null)
             {
-                LogMessage(String.Format("SF_ClusterCertIssuerThumbprints={0}", server_issuer_thumbprints));
+                LogMessage(String.Format("SF_ClusterCertIssuerThumbprints = {0}", server_issuer_thumbprints));
             }
-                        
-            gateway_listen_ip = Environment.GetEnvironmentVariable("Gateway_Listen_IP");
-            if (gateway_listen_ip == null)
-            {
-                gateway_listen_ip = "0.0.0.0";
-            }
-            //Gateway_Config_L4=ApplicationName=App, ServiceName=srv, EndpointName=ep1, PublicPort=8081, ApplicationName=App, ServiceName=srv, EndpointName=ep2, PublicPort=8082
 
-            string gateway_config_L4 = Environment.GetEnvironmentVariable("Gateway_Config_L4");
-            if (gateway_config_L4 != null)
+            var gateway_listen_network = "";
+            LogMessage("Getting Gateway_Config");
+            string gateway_config = Environment.GetEnvironmentVariable("Gateway_Config");
+            if (gateway_config != null && gateway_config != "")
             {
-                gateway_map = new Dictionary<string, string>();
-                var segments = gateway_config_L4.Split(",");
-                for (int i = 0; i < segments.Count(); i += 4)
+                LogMessage(String.Format("Gateway_Config = {0}", gateway_config));
+                var gatewayProperties = JsonConvert.DeserializeObject<GatewayResourceDescription>(gateway_config);
+
+                LogMessage(String.Format("Gateway_Config: Deserialized"));
+                gateway_listen_network = gatewayProperties.SourceNetwork.Name;
+
+                gateway_map = new Dictionary<string, List<ListenerFilterConfig>>();
+                gateway_clusternames = new HashSet<string>();
+                LogMessage(String.Format("Gateway_Config: Start processing"));
+                if (gatewayProperties.Tcp != null)
                 {
-                    var applicationSegements = segments[i].Split("=");
-                    var serviceSegements = segments[i + 1].Split("=");
-                    var endpointSegements = segments[i + 2].Split("=");
-                    var publicPortSegements = segments[i + 3].Split("=");
-
-                    string serviceName = applicationSegements[1] + "_" + serviceSegements[1];
-                    if (endpointSegements[1] != "")
+                    foreach (var e in gatewayProperties.Tcp)
                     {
-                        serviceName += "_" + endpointSegements[1];
+                        string serviceName = e.Destination.EnvoyServiceName();
+                        if (!gateway_map.ContainsKey(e.Port.ToString()) ||
+                            gateway_map[e.Port.ToString()] == null)
+                        {
+                            gateway_map[e.Port.ToString()] = new List<ListenerFilterConfig>();
+                        }
+                        gateway_map[e.Port.ToString()].Add(
+                            new ListenerFilterConfig(
+                                e.Name,
+                                ListenerFilterConfig.ListenerFilterType.Tcp,
+                                serviceName));
+                        gateway_clusternames.Add(serviceName);
                     }
-                    serviceName += "|*|-2";
-                    gateway_map[serviceName] = publicPortSegements[1];
+                }
+                if (gatewayProperties.Http != null)
+                {
+                    foreach (var httpConfig in gatewayProperties.Http)
+                    {
+                        string configName = "gateway_config|" + httpConfig.Port;
+                        if (!gateway_map.ContainsKey(httpConfig.Port.ToString()) ||
+                            gateway_map[httpConfig.Port.ToString()] == null)
+                        {
+                            gateway_map[httpConfig.Port.ToString()] = new List<ListenerFilterConfig>();
+                        }
+                        gateway_map[httpConfig.Port.ToString()].Add(
+                            new ListenerHttpFilterConfig(
+                                httpConfig.Name,
+                                configName,
+                                httpConfig.Hosts));
+                        foreach (var host in httpConfig.Hosts)
+                        {
+                            foreach (var e in host.Routes)
+                            {
+                                var serviceName = e.Destination.EnvoyServiceName();
+                                gateway_clusternames.Add(serviceName);
+                            }
+                        }
+                    }
+                }
+                LogMessage(String.Format("Gateway_Config: End processing"));
+            }
+            else
+                LogMessage("Gateway_Config=null");
+
+            if (gateway_listen_network != null)
+            {
+                LogMessage(String.Format("Gateway_Listen_Network = {0}", gateway_listen_network));
+                gateway_listen_network = "[" + gateway_listen_network + "]";
+                var env = Environment.GetEnvironmentVariables();
+                var keys = env.Keys;
+                foreach (System.Collections.DictionaryEntry de in env)
+                {
+                    var variable = de.Key.ToString();
+                    if (variable.Contains(gateway_listen_network) && variable.StartsWith("Fabric_NET"))
+                    {
+                        gateway_listen_ip = de.Value.ToString();
+                        break;
+                    }
                 }
             }
+            else
+                LogMessage("Gateway_Listen_Network=null");
+
+            LogMessage("gateway_listen_ip = " + gateway_listen_ip);
         }
         private static string GetInternalGatewayAddress()
         {
@@ -275,7 +347,7 @@ namespace webapi
 
         public static List<string> verify_subject_alt_name = new List<string>();
 
-        public static cluster_ssl_context cluster_ssl_context;
+        public static EnvoyClusterSslContext cluster_ssl_context;
 
         public static string host_ip;
 
@@ -293,231 +365,28 @@ namespace webapi
 
         public static bool is_gateway_config = false;
 
-        public static string gateway_listen_ip;
+        public static string gateway_listen_ip = "0.0.0.0";
 
-        public static Dictionary<string, string> gateway_map;
+        public static Dictionary<string, List<ListenerFilterConfig>> gateway_map;
+        public static HashSet<string> gateway_clusternames;
     }
     public class EnvoyClustersInformation
     {
-        public EnvoyClustersInformation(string name, List<EnvoyRouteModel> routes, List<EnvoyHostModel> hosts, bool isHttps = false)
+        public EnvoyClustersInformation(string name, List<EnvoyRoute> routes, List<EnvoyHost> hosts, bool isHttps = false)
         {
-            cluster = new EnvoyClusterModel(name, isHttps);
+            cluster = new EnvoyCluster(name, EnvoyDefaults.connect_timeout_ms, isHttps, EnvoyDefaults.cluster_ssl_context);
             this.routes = routes;
             this.hosts = hosts;
         }
 
         [JsonProperty]
-        public EnvoyClusterModel cluster;
+        public EnvoyCluster cluster;
 
         [JsonProperty]
-        public List<EnvoyRouteModel> routes;
+        public List<EnvoyRoute> routes;
 
         [JsonProperty]
-        public List<EnvoyHostModel> hosts;
-    }
-
-    public class EnvoyClusterModel
-    {
-        public EnvoyClusterModel(string name, bool isHttps = false)
-        {
-            this.name = name;
-            this.service_name = name;
-            if (isHttps)
-            {
-                ssl_context = EnvoyDefaults.cluster_ssl_context;
-            }
-        }
-
-        [JsonProperty]
-        public string name;
-
-        [JsonProperty]
-        public string service_name;
-
-        [JsonProperty]
-        public string type = "sds";
-
-        [JsonProperty]
-        public int connect_timeout_ms = EnvoyDefaults.connect_timeout_ms;
-
-        [JsonProperty]
-        public string lb_type = "round_robin";
-
-        [JsonProperty]
-        public EnvoyOutlierDetectionDataModel outlier_detection = EnvoyOutlierDetectionDataModel.defaultValue;
-
-        [JsonProperty]
-        public cluster_ssl_context ssl_context;
-        public bool ShouldSerializessl_context()
-        {
-            return (ssl_context != null);
-        }
-    }
-
-    public class EnvoyRouteModel
-    {
-        public EnvoyRouteModel(string cluster, string prefix, string prefix_rewrite, List<JObject> headers)
-        {
-            this.cluster = cluster;
-            this.prefix = prefix;
-            this.prefix_rewrite = prefix_rewrite;
-            if (!prefix.EndsWith("/"))
-            {
-                this.prefix += "/";
-            }
-            if (!prefix_rewrite.EndsWith("/"))
-            {
-                this.prefix_rewrite += "/";
-            }
-            this.headers = headers;
-        }
-
-        [JsonProperty]
-        public string cluster;
-
-        [JsonProperty]
-        public string prefix;
-
-        [JsonProperty]
-        public string prefix_rewrite;
-
-        [JsonProperty]
-        public List<JObject> headers;
-        public bool ShouldSerializeheaders()
-        {
-            return headers != null && headers.Count != 0;
-        }
-
-        [JsonProperty]
-        public int timeout_ms = EnvoyDefaults.timeout_ms;
-
-        [JsonProperty]
-        public EnvoyRetryPolicyModel retry_policy = EnvoyRetryPolicyModel.defaultValue;
-    }
-
-    public class EnvoyHostModel
-    {
-        public EnvoyHostModel(string ip_address, int port)
-        {
-            this.ip_address = EnvoyDefaults.LocalHostFixup(ip_address);
-            this.port = port;
-        }
-
-        [JsonProperty]
-        public string ip_address;
-
-        [JsonProperty]
-        public int port;
-
-        [JsonProperty]
-        public EnvoyHostTagsModel tags = EnvoyHostTagsModel.defaultValue;
-    }
-
-    public class EnvoyHostTagsModel
-    {
-        [JsonProperty]
-        public string az = "";
-
-        [JsonProperty]
-        public bool canary = false;
-
-        [JsonProperty]
-        public int load_balancing_weight = 100;
-
-        public static EnvoyHostTagsModel defaultValue = new EnvoyHostTagsModel();
-    }
-
-    public class EnvoyRetryPolicyModel
-    {
-        [JsonProperty]
-        public string retry_on = "5xx, connect-failure";
-
-        [JsonProperty]
-        public int num_retries = 5;
-
-        public static EnvoyRetryPolicyModel defaultValue = new EnvoyRetryPolicyModel();
-    }
-
-    public class EnvoyOutlierDetectionDataModel
-    {
-        [JsonProperty]
-        public int consecutive_5xx = 3;
-
-        static public EnvoyOutlierDetectionDataModel defaultValue = new EnvoyOutlierDetectionDataModel();
-    }
-
-    class EnvoyFilterConfig
-    {
-        public EnvoyFilterConfig(string stat_prefix)
-        {
-            this.stat_prefix = stat_prefix;
-        }
-
-        [JsonProperty]
-        public string stat_prefix;
-    }
-
-    class EnvoyTCPRoute
-    {
-        public EnvoyTCPRoute(string cluster)
-        {
-            this.cluster = cluster;
-        }
-
-        [JsonProperty]
-        public string cluster;
-    }
-    class EnvoyTCPRouteConfig
-    {
-        public EnvoyTCPRouteConfig(string cluster)
-        {
-            routes = new List<EnvoyTCPRoute>();
-            routes.Add(new EnvoyTCPRoute(cluster));
-        }
-        [JsonProperty]
-        List<EnvoyTCPRoute> routes;
-    }
-
-    class EnvoyTCPFilterConfig : EnvoyFilterConfig
-    {
-        public EnvoyTCPFilterConfig(string stat_prefix, string cluster) : base(stat_prefix)
-        {
-            route_config = new EnvoyTCPRouteConfig(cluster);
-        }
-        [JsonProperty]
-        public EnvoyTCPRouteConfig route_config;
-    }
-
-    class EnvoyTCPListenerFilter
-    {
-        public EnvoyTCPListenerFilter(string stat_prefix, string cluster)
-        {
-            config = new EnvoyTCPFilterConfig(stat_prefix, cluster);
-        }
-        [JsonProperty]
-        public string name = "tcp_proxy";
-
-        [JsonProperty]
-        public EnvoyTCPFilterConfig config;
-    }
-
-    class EnvoyListenerModel
-    {
-        public EnvoyListenerModel(string name, string address, string stat_prefix, string cluster)
-        {
-            this.name = name;
-            this.address = address;
-            this.filters = new List<EnvoyTCPListenerFilter>();
-            this.filters.Add(new EnvoyTCPListenerFilter(stat_prefix, cluster));
-        }
-        [JsonProperty]
-        public string name;
-
-        [JsonProperty]
-        public string address;
-
-        [JsonProperty]
-        public List<EnvoyTCPListenerFilter> filters;
+        public List<EnvoyHost> hosts;
     }
 
     public class SF_EndpointInstance
@@ -632,23 +501,34 @@ namespace webapi
         static private FabricClient client;
         static SF_Services()
         {
-
             try
             {
                 partitions_ = null;
 
-                if (EnvoyDefaults.client_cert_subject_name != null)
+                if (!string.IsNullOrWhiteSpace(EnvoyDefaults.client_cert_subject_name) ||
+                    EnvoyDefaults.client_cert_issuer_thumbprints != null)
                 {
+                    EnvoyDefaults.LogMessage("Client: Creating, secure");
+
                     X509Credentials creds = new X509Credentials();
-                    creds.FindType = X509FindType.FindBySubjectName;
-                    creds.FindValue = EnvoyDefaults.client_cert_subject_name;
-                    if (EnvoyDefaults.client_cert_issuer_thumbprints != null)
+                    if (!string.IsNullOrWhiteSpace(EnvoyDefaults.client_cert_subject_name))
                     {
-                        foreach (var issuer in EnvoyDefaults.client_cert_issuer_thumbprints)
+                        creds.FindType = X509FindType.FindBySubjectName;
+                        creds.FindValue = EnvoyDefaults.client_cert_subject_name;
+                        if (EnvoyDefaults.client_cert_issuer_thumbprints != null)
                         {
-                            creds.IssuerThumbprints.Add(issuer);
+                            foreach (var issuer in EnvoyDefaults.client_cert_issuer_thumbprints)
+                            {
+                                creds.IssuerThumbprints.Add(issuer);
+                            }
                         }
                     }
+                    else
+                    {
+                        creds.FindType = X509FindType.FindByThumbprint;
+                        creds.FindValue = EnvoyDefaults.client_cert_issuer_thumbprints[0];
+                    }
+
                     if (EnvoyDefaults.server_cert_common_names != null)
                     {
                         foreach (var commonName in EnvoyDefaults.server_cert_common_names)
@@ -656,7 +536,7 @@ namespace webapi
                             creds.RemoteCommonNames.Add(commonName);
                         }
                     }
-                    else
+                    else if (!string.IsNullOrWhiteSpace(EnvoyDefaults.client_cert_subject_name))
                     {
                         creds.RemoteCommonNames.Add(EnvoyDefaults.client_cert_subject_name);
                     }
@@ -675,13 +555,17 @@ namespace webapi
                         }
                     }
                     creds.StoreLocation = StoreLocation.LocalMachine;
-                    creds.StoreName = "/app/sfcerts";
+                    creds.StoreName = "/var/lib/sfcerts";
 
+                    EnvoyDefaults.LogMessage("Client: Start Create, secure");
                     client = new FabricClient(creds, EnvoyDefaults.fabricUri);
+                    EnvoyDefaults.LogMessage("Client: End Create, secure");
                 }
                 else
                 {
+                    EnvoyDefaults.LogMessage("Client: Creating, nonsecure");
                     client = new FabricClient(EnvoyDefaults.fabricUri);
+                    EnvoyDefaults.LogMessage("Client: End Create, nonsecure");
                 }
                 EnvoyDefaults.LogMessage("Client sucessfully created");
 
@@ -690,7 +574,7 @@ namespace webapi
             }
             catch (Exception e)
             {
-                EnvoyDefaults.LogMessage(String.Format("Error={0}", e));
+                EnvoyDefaults.LogMessage(String.Format("Error = {0}", e));
             }
         }
 
@@ -710,6 +594,7 @@ namespace webapi
         // Assumes partitions_ is not null and the data structures are already locked
         private static void RemovePartitionFromService(Guid partitionId)
         {
+            EnvoyDefaults.LogMessage(String.Format("Removed: {0}", partitionId));
             foreach (var service in services_)
             {
                 service.Value.Partitions.RemoveAll(x => x == partitionId);
@@ -722,6 +607,8 @@ namespace webapi
 
         private static void AddPartitionToService(Guid partitionId, SF_Partition partitionInfo)
         {
+            EnvoyDefaults.LogMessage(String.Format("Added: {0} = {1}", partitionId,
+                JsonConvert.SerializeObject(partitionInfo)));
             for (int listenerIndex = 0; listenerIndex < partitionInfo.listeners_.Count; listenerIndex++)
             {
                 string serviceName = CalculateNameForService(partitionInfo, listenerIndex);
@@ -744,6 +631,7 @@ namespace webapi
 
         private static void Handler(Object sender, EventArgs eargs)
         {
+            EnvoyDefaults.LogMessage("Notification Handler: Start", EnvoyDefaults.IndentOperation.BeginLevel);
             try
             {
                 var notification = ((FabricClient.ServiceManagementClient.ServiceNotificationEventArgs)eargs).Notification;
@@ -762,20 +650,26 @@ namespace webapi
                             partitionsAdd_.Remove(notification.PartitionId);
                             partitionsRemove_[notification.PartitionId] = null;
                         }
-                        EnvoyDefaults.LogMessage(String.Format("Removed: {0}", notification.PartitionId));
-
+                        EnvoyDefaults.LogMessage("Notification Handler: End", EnvoyDefaults.IndentOperation.EndLevel);
                         return;
                     }
                 }
 
                 List<SF_Endpoint> listeners = new List<SF_Endpoint>();
                 ServiceEndpointRole role = ServiceEndpointRole.Invalid;
+                EnvoyDefaults.LogMessage(String.Format("{0}: Start Enumerating Replicas", notification.PartitionId),
+                    EnvoyDefaults.IndentOperation.BeginLevel);
+                EnvoyDefaults.LogMessage(String.Format("{0}: Replica Count = {1}", notification.PartitionId,
+                    notification.Endpoints.Count()));
                 foreach (var notificationEndpoint in notification.Endpoints)
                 {
                     if (notificationEndpoint.Address.Length == 0)
                     {
+                        EnvoyDefaults.LogMessage("_Node = <Empty>");
                         continue;
                     }
+
+                    EnvoyDefaults.LogMessage(String.Format("_Node = {0}", notificationEndpoint.Address));
                     JObject addresses;
                     try
                     {
@@ -798,12 +692,8 @@ namespace webapi
                         try
                         {
                             var listenerAddressString = notificationListener.Value.ToString();
-                            if (!listenerAddressString.StartsWith("http") &&
-                                !listenerAddressString.StartsWith("https"))
-                            {
-                                continue;
-                            }
-                            var listenerAddress = new Uri(listenerAddressString);
+                            EnvoyDefaults.LogMessage(String.Format("AddressString = {0}", listenerAddressString));
+                            var listenerAddress = new UriBuilder(listenerAddressString).Uri;
                             if (listenerAddress.HostNameType == UriHostNameType.Dns)
                             {
                                 var ipaddrs = Dns.GetHostAddresses(listenerAddress.Host);
@@ -826,7 +716,7 @@ namespace webapi
                         }
                         catch (System.Exception e)
                         {
-                            EnvoyDefaults.LogMessage(String.Format("Error={0}", e));
+                            EnvoyDefaults.LogMessage(String.Format("Error = {0}", e));
                         }
                     }
                     if (role == ServiceEndpointRole.Invalid)
@@ -834,12 +724,15 @@ namespace webapi
                         role = notificationEndpoint.Role;
                     }
                 }
+                EnvoyDefaults.LogMessage(String.Format("{0}: End Enumerating Replicas", notification.PartitionId),
+                    EnvoyDefaults.IndentOperation.EndLevel);
 
                 // Remove any listeners without active endpoints
                 listeners.RemoveAll(x => x.InstanceCount() == 0);
 
                 if (listeners.Count == 0)
                 {
+                    EnvoyDefaults.LogMessage("Notification Handler: End", EnvoyDefaults.IndentOperation.EndLevel);
                     return;
                 }
 
@@ -862,15 +755,14 @@ namespace webapi
                         partitionsRemove_.Remove(notification.PartitionId);
                         partitionsAdd_[notification.PartitionId] = partitionInfo;
                     }
-                    EnvoyDefaults.LogMessage(String.Format("Added: {0}={1}", notification.PartitionId,
-                        JsonConvert.SerializeObject(partitionInfo)));
                 }
             }
             catch (Exception e)
             {
-                EnvoyDefaults.LogMessage(String.Format("Error={0}", e.Message));
-                EnvoyDefaults.LogMessage(String.Format("Error={0}", e.StackTrace));
+                EnvoyDefaults.LogMessage(String.Format("Error = {0}", e.Message));
+                EnvoyDefaults.LogMessage(String.Format("Error = {0}", e.StackTrace));
             }
+            EnvoyDefaults.LogMessage("Notification Handler: End", EnvoyDefaults.IndentOperation.EndLevel);
         }
 
         /// <summary>
@@ -896,29 +788,43 @@ namespace webapi
             }
             catch (Exception e)
             {
-                EnvoyDefaults.LogMessage("GetApplicationListAsync failed");
-                EnvoyDefaults.LogMessage(String.Format("Error={0}", e.Message));
-                EnvoyDefaults.LogMessage(String.Format("Error={0}", e.StackTrace));
+                EnvoyDefaults.LogMessage("GetApplicationListAsync: Failed");
+                EnvoyDefaults.LogMessage(String.Format("Error = {0}", e.Message));
+                EnvoyDefaults.LogMessage(String.Format("Error = {0}", e.StackTrace));
                 Environment.FailFast("GetApplicationListAsync failed");
             }
-            EnvoyDefaults.LogMessage("GetApplicationListAsync Succeeded");
+            EnvoyDefaults.LogMessage("GetApplicationListAsync: Succeeded");
+            EnvoyDefaults.LogMessage(String.Format("GetApplicationListAsync: Application Count = {0}", applications.Count()));
+            EnvoyDefaults.LogMessage("Start Enumerating Applications", EnvoyDefaults.IndentOperation.BeginLevel);
             foreach (var application in applications)
             {
+                EnvoyDefaults.LogMessage(String.Format("{0}: Start Enumerating Services", application.ApplicationName),
+                    EnvoyDefaults.IndentOperation.BeginLevel);
                 var services = await queryManager.GetServiceListAsync(application.ApplicationName);
+                EnvoyDefaults.LogMessage(String.Format("{0}: Service Count = {1}", application.ApplicationName, services.Count()));
                 foreach (var service in services)
                 {
+                    EnvoyDefaults.LogMessage(String.Format("{0}: Start Enumerating Partitions", service.ServiceName),
+                        EnvoyDefaults.IndentOperation.BeginLevel);
                     var partitions = await queryManager.GetPartitionListAsync(service.ServiceName);
+                    EnvoyDefaults.LogMessage(String.Format("{0}: Partition Count = {1}", service.ServiceName, partitions.Count()));
                     foreach (var partition in partitions)
                     {
                         List<SF_Endpoint> listeners = new List<SF_Endpoint>();
 
+                        EnvoyDefaults.LogMessage(String.Format("{0}: Start Enumerating Replicas", partition.PartitionInformation.Id),
+                            EnvoyDefaults.IndentOperation.BeginLevel);
                         var replicas = await queryManager.GetReplicaListAsync(partition.PartitionInformation.Id);
+                        EnvoyDefaults.LogMessage(String.Format("{0}: Replica Count = {1}", partition.PartitionInformation.Id, replicas.Count()));
                         foreach (var replica in replicas)
                         {
                             if (replica.ReplicaAddress.Length == 0)
                             {
+                                EnvoyDefaults.LogMessage(String.Format("{0} = <Empty>", replica.NodeName));
                                 continue;
                             }
+
+                            EnvoyDefaults.LogMessage(String.Format("{0} = {1}", replica.NodeName, replica.ReplicaAddress));
                             JObject addresses;
                             try
                             {
@@ -958,12 +864,8 @@ namespace webapi
                                 try
                                 {
                                     var listenerAddressString = replicaListener.Value.ToString();
-                                    if (!listenerAddressString.StartsWith("http") &&
-                                        !listenerAddressString.StartsWith("https"))
-                                    {
-                                        continue;
-                                    }
-                                    var listenerAddress = new Uri(replicaListener.Value.ToString());
+                                    EnvoyDefaults.LogMessage(String.Format("AddressString = {0}", listenerAddressString));
+                                    var listenerAddress = new UriBuilder(listenerAddressString).Uri;
                                     if (listenerAddress.HostNameType == UriHostNameType.Dns)
                                     {
                                         var ipaddrs = Dns.GetHostAddresses(listenerAddress.Host);
@@ -986,28 +888,34 @@ namespace webapi
                                 }
                                 catch (System.Exception e)
                                 {
-                                    EnvoyDefaults.LogMessage(String.Format("Error={0}", e));
+                                    EnvoyDefaults.LogMessage(String.Format("Error = {0}", e));
                                 }
                             }
+                            EnvoyDefaults.LogMessage(String.Format("{0}: End Enumerating Replicas", partition.PartitionInformation.Id),
+                                EnvoyDefaults.IndentOperation.EndLevel);
                         }
 
                         // Remove any listeners without active endpoints
                         listeners.RemoveAll(x => x.InstanceCount() == 0);
 
-                        if (listeners.Count == 0)
+                        if (listeners.Count != 0)
                         {
-                            continue;
+                            var partitionInfo = new SF_Partition(service.ServiceName,
+                                service.ServiceKind,
+                                partition.PartitionInformation,
+                                null,
+                                listeners);
+
+                            partitionData[partition.PartitionInformation.Id] = partitionInfo;
                         }
-
-                        var partitionInfo = new SF_Partition(service.ServiceName,
-                            service.ServiceKind,
-                            partition.PartitionInformation,
-                            null,
-                            listeners);
-
-                        partitionData[partition.PartitionInformation.Id] = partitionInfo;
+                        EnvoyDefaults.LogMessage(String.Format("{0}: End Enumerating Partitions", service.ServiceName),
+                                EnvoyDefaults.IndentOperation.EndLevel);
                     }
+                    EnvoyDefaults.LogMessage(String.Format("{0}: End Enumerating Services", application.ApplicationName),
+                                EnvoyDefaults.IndentOperation.EndLevel);
                 }
+                EnvoyDefaults.LogMessage("End Enumerating Applications",
+                                EnvoyDefaults.IndentOperation.EndLevel);
             }
 
             // Process changes received through notifications
@@ -1028,7 +936,7 @@ namespace webapi
                 foreach (var partition in partitionData)
                 {
                     AddPartitionToService(partition.Key, partition.Value);
-                    EnvoyDefaults.LogMessage(String.Format("Added: {0}={1}", partition.Key,
+                    EnvoyDefaults.LogMessage(String.Format("Added: {0} = {1}", partition.Key,
                         JsonConvert.SerializeObject(partition.Value)));
                 }
 
@@ -1087,8 +995,8 @@ namespace webapi
 
                     for (int index = 0; index < replicaIndexes.Count; index++)
                     {
-                        List<EnvoyRouteModel> routeData = new List<EnvoyRouteModel>();
-                        List<EnvoyHostModel> hostData = new List<EnvoyHostModel>();
+                        List<EnvoyRoute> routeData = new List<EnvoyRoute>();
+                        List<EnvoyHost> hostData = new List<EnvoyHost>();
                         string cluster = partitionId.ToString() + "|" + endpointIndex.ToString() + "|" + replicaIndexes[index].ToString();
                         string prefix_rewrite = ep.GetAt(index).endpoint_.AbsolutePath;
                         List<JObject> headers = new List<JObject>();
@@ -1105,21 +1013,21 @@ namespace webapi
                         }
                         if (statefulPartition)
                         {
-                            hostData.Add(new EnvoyHostModel(ep.GetAt(index).endpoint_.Host, ep.GetAt(index).endpoint_.Port));
+                            hostData.Add(new EnvoyHost(ep.GetAt(index).endpoint_.Host, ep.GetAt(index).endpoint_.Port));
                             var partitionKind = partition.partitionInformation_.Kind;
                             if (partitionKind == ServicePartitionKind.Int64Range)
                             {
-                                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-                                {
-                                    // Remove once Windows has Envoy 1.6
-                                    continue;
-                                }
+                                //if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                                //{
+                                //    // Remove once Windows has Envoy 1.6
+                                //    continue;
+                                //}
 
                                 var rangePartitionInformation = (Int64RangePartitionInformation)partition.partitionInformation_;
                                 if (rangePartitionInformation.LowKey == Int64.MinValue &&
                                     rangePartitionInformation.HighKey == Int64.MaxValue)
                                 {
-                                    routeData.Add(new EnvoyRouteModel(cluster, prefix, prefix_rewrite, headers));
+                                    routeData.Add(new EnvoyRoute(cluster, prefix, prefix_rewrite, headers, EnvoyDefaults.timeout_ms));
                                 }
                                 else
                                 {
@@ -1133,7 +1041,7 @@ namespace webapi
 
                                         List<JObject> maxValHeaders = new List<JObject>(headers);
                                         maxValHeaders.Add(maxValHeader);
-                                        routeData.Add(new EnvoyRouteModel(cluster, prefix, prefix_rewrite, maxValHeaders));
+                                        routeData.Add(new EnvoyRoute(cluster, prefix, prefix_rewrite, maxValHeaders, EnvoyDefaults.timeout_ms));
                                     }
                                     else
                                     {
@@ -1149,7 +1057,7 @@ namespace webapi
 
                                     List<JObject> keyHeaders = new List<JObject>(headers);
                                     keyHeaders.Add(partitionKeyHeader);
-                                    routeData.Add(new EnvoyRouteModel(cluster, prefix, prefix_rewrite, keyHeaders));
+                                    routeData.Add(new EnvoyRoute(cluster, prefix, prefix_rewrite, keyHeaders, EnvoyDefaults.timeout_ms));
                                 }
                             }
                             else if (partitionKind == ServicePartitionKind.Named)
@@ -1162,7 +1070,7 @@ namespace webapi
 
                                 List<JObject> keyHeaders = new List<JObject>(headers);
                                 keyHeaders.Add(partitionKeyHeader);
-                                routeData.Add(new EnvoyRouteModel(cluster, prefix, prefix_rewrite, keyHeaders));
+                                routeData.Add(new EnvoyRoute(cluster, prefix, prefix_rewrite, keyHeaders, EnvoyDefaults.timeout_ms));
                             }
                         }
                         else
@@ -1171,9 +1079,9 @@ namespace webapi
                             for (int i = 0; i < ep.InstanceCount(); i++)
                             {
                                 var address = ep.GetAt(i);
-                                hostData.Add(new EnvoyHostModel(address.endpoint_.Host, address.endpoint_.Port));
+                                hostData.Add(new EnvoyHost(address.endpoint_.Host, address.endpoint_.Port));
                             }
-                            routeData.Add(new EnvoyRouteModel(cluster, prefix, prefix_rewrite, headers));
+                            routeData.Add(new EnvoyRoute(cluster, prefix, prefix_rewrite, headers, EnvoyDefaults.timeout_ms));
                         }
                         if (ep.GetAt(index).endpoint_.Scheme == "https")
                         {

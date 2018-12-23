@@ -2,11 +2,25 @@
 
 # timestamp function
 timestamp() {
-  echo $(date +"%DT%T.%3N%Z")
+  echo [$(date +"%Y-%m-%d %H:%M:%S.%3N%Z")][info][startup.sh]
 }
 
-mkdir -p /var/log/sfreverseproxy
-reverse_proxy_log_path="/var/log/sfreverseproxy/stdout"
+# timestamp function
+timestamperror() {
+  echo [$(date +"%Y-%m-%d %H:%M:%S.%3N%Z")][error][startup.sh]
+}
+
+if [ "${Fabric_Folder_App_Log}" == "" ]
+then
+    Fabric_Folder_App_Log=./log
+    mkdir ./log
+else
+    ln -s ${Fabric_Folder_App_Log} ./log
+fi
+reverse_proxy_log_path=${Fabric_Folder_App_Log}/sfreverseproxy.stdout
+
+cat imagecreationtime.txt | tee -a ${reverse_proxy_log_path}.log
+set | tee -a ${reverse_proxy_log_path}.log
 
 use_https=${UseHttps:-false}
 gateway_mode=${GatewayMode:-false}
@@ -18,7 +32,7 @@ else
     then
         if [ -z "${ReverseProxyCertThumbprint}" ]
         then
-            echo $(timestamp), startup.sh, Invalid Reverse Proxy Thumbprint > ${reverse_proxy_log_path}.log
+            echo $(timestamperror) Invalid Reverse Proxy Thumbprint | tee -a ${reverse_proxy_log_path}.log
             exit 1
         fi
         sed -e s/ReverseProxyCertThumbprint/$(echo ${ReverseProxyCertThumbprint} | sed 's/[&/\]/\\&/g')/g \
@@ -29,22 +43,24 @@ else
     fi
 fi
 
-if [ ${Fabric_NodeName} == ""]
+if [ "${Fabric_NodeName}" == "" ]
 then
     Fabric_NodeName="standalone"
 fi
 
-echo $(timestamp), startup.sh, Begin validate Envoy cofigfile, $config_file >> ${reverse_proxy_log_path}.log
-echo /usr/local/bin/envoy -c ${config_file} --service-cluster ReverseProxy --service-node ${Fabric_NodeName} --mode validate
-/usr/local/bin/envoy -c ${config_file} --service-cluster ReverseProxy --service-node ${Fabric_NodeName} --mode validate >> "${reverse_proxy_log_path}.log" 2>&1
+echo $(timestamp) LD_LIBRARY_PATH=/opt/microsoft/servicefabric/bin/Fabric/Fabric.Code:. FabricPackageFileName= ./sfintegration | tee -a "${reverse_proxy_log_path}.log"
+LD_LIBRARY_PATH=/opt/microsoft/servicefabric/bin/Fabric/Fabric.Code:. FabricPackageFileName= ./sfintegration  2>&1 | tee -a "${reverse_proxy_log_path}.sfintegration.log" &
+
+echo $(timestamp) Begin validate Envoy cofigfile, $config_file | tee -a ${reverse_proxy_log_path}.log
+echo $(timestamp) /usr/local/bin/envoy -c ${config_file} --service-cluster ReverseProxy --service-node ${Fabric_NodeName} --mode validate | tee -a ${reverse_proxy_log_path}.log
+/usr/local/bin/envoy --disable-hot-restart -c ${config_file} --service-cluster ReverseProxy --service-node ${Fabric_NodeName} --mode validate 2>&1 | tee -a "${reverse_proxy_log_path}.log"
 retval=$?
 if [ $retval -eq 1 ]
 then
-    echo $(timestamp), startup.sh, Failed validate Envoy cofigfile, $config_file >> "${reverse_proxy_log_path}.log" 2>&1
+    echo $(timestamperror) Failed validate Envoy cofigfile, $config_file | tee -a "${reverse_proxy_log_path}.log"
     exit 1
 fi
-echo $(timestamp), startup.sh, Succeeded validate Envoy cofigfile, $config_file >> "${reverse_proxy_log_path}.log" 2>&1
+echo $(timestamp) Succeeded validate Envoy cofigfile, $config_file | tee -a "${reverse_proxy_log_path}.log" 
 
-
-/usr/local/bin/envoy -l info -c ${config_file} --service-cluster ReverseProxy --service-node ${Fabric_NodeName} >> "${reverse_proxy_log_path}.envoy.log" 2>&1 &
-LD_LIBRARY_PATH=/opt/microsoft/servicefabric/bin/Fabric/Fabric.Code:. FabricPackageFileName= dotnet sfintegration.dll >> "${reverse_proxy_log_path}.sfintegration.log" 2>&1
+echo $(timestamp) /usr/local/bin/envoy --max-obj-name-len 256 -l info --disable-hot-restart -c ${config_file} --service-cluster ReverseProxy --service-node ${Fabric_NodeName} | tee -a "${reverse_proxy_log_path}.log"
+/usr/local/bin/envoy --max-obj-name-len 256 -l info --disable-hot-restart -c ${config_file} --service-cluster ReverseProxy --service-node ${Fabric_NodeName}  2>&1 | tee -a "${reverse_proxy_log_path}.envoy.log"
