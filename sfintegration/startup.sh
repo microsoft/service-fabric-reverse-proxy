@@ -10,7 +10,6 @@ timestamperror() {
   echo [$(date +"%Y-%m-%d %H:%M:%S.%3N%Z")][error][startup.sh]
 }
 
-cat imagecreationtime.txt
 if [ "${Fabric_Folder_App_Log}" == "" ]
 then
     Fabric_Folder_App_Log=./log
@@ -20,8 +19,8 @@ else
 fi
 reverse_proxy_log_path=${Fabric_Folder_App_Log}/sfreverseproxy.stdout
 
+cat imagecreationtime.txt | tee -a ${reverse_proxy_log_path}.log
 set | tee -a ${reverse_proxy_log_path}.log
-cat /proc/sys/kernel/random/entropy_avail
 
 use_https=${UseHttps:-false}
 gateway_mode=${GatewayMode:-false}
