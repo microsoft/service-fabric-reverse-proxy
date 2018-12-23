@@ -209,7 +209,7 @@ namespace webapi
             }
             if (server_issuer_thumbprints != null)
             {
-                LogMessage(String.Format("SF_ClientCertIssuerThumbprints = {0}", server_issuer_thumbprints));
+                LogMessage(String.Format("SF_ClusterCertIssuerThumbprints = {0}", server_issuer_thumbprints));
             }
 
             var gateway_listen_network = "";
