@@ -945,6 +945,63 @@ namespace webapi
             }
         }
 
+        public static List<EnvoyRoute> RoutesForReplica(string replica, string prefix, string prefix_rewrite, 
+            string prefixWithListenerName, string namedPartition, JObject listenerNameHeader, JObject partitionKeyHeader, JObject secondaryIndexHeader)
+        {
+            List<EnvoyRoute> ret = new List<EnvoyRoute>();
+            List<JObject> headers = new List<JObject>();
+            if (secondaryIndexHeader != null)
+            {
+                headers.Add(secondaryIndexHeader);
+            }
+
+            // Add variations of path for listername as part of path
+            if (prefixWithListenerName != null)
+            {
+                if (namedPartition != null)
+                {
+                    ret.Add(new EnvoyRoute(replica, prefixWithListenerName + namedPartition + "/", prefix_rewrite, headers, EnvoyDefaults.timeout_ms));
+                }
+                else
+                {
+                    if (partitionKeyHeader != null)
+                    {
+                        headers.Add(partitionKeyHeader);
+                    }
+                    ret.Add(new EnvoyRoute(replica, prefixWithListenerName, prefix_rewrite, headers, EnvoyDefaults.timeout_ms));
+                }
+            }
+            else
+            {
+                if (namedPartition != null)
+                {
+                    ret.Add(new EnvoyRoute(replica, prefix + namedPartition + "/", prefix_rewrite, headers, EnvoyDefaults.timeout_ms));
+                }
+            }
+
+            List<JObject> allHeaders = new List<JObject>();
+            if (secondaryIndexHeader != null)
+            {
+                allHeaders.Add(secondaryIndexHeader);
+            }
+
+            if (prefixWithListenerName != null)
+            {
+                allHeaders.Add(listenerNameHeader);
+            }
+
+            if (partitionKeyHeader != null)
+            {
+                // This header is not added earlier when listenerName == null 
+                allHeaders.Add(partitionKeyHeader);
+            }
+
+            // All headers are added, create route
+            ret.Add(new EnvoyRoute(replica, prefix, prefix_rewrite, allHeaders, EnvoyDefaults.timeout_ms));
+
+            return ret;
+        }
+
         public static List<EnvoyClustersInformation> EnvoyInformationForPartition(Guid partitionId)
         {
             lock (lock_)
@@ -974,6 +1031,7 @@ namespace webapi
                     var ep = partition.listeners_[endpointIndex];
                     List<int> replicaIndexes;
                     bool statefulPartition = false;
+                    string prefixWithListenerName = null; ;
                     if (partition.serviceKind_ == ServiceKind.Stateless)
                     {
                         // For stateless, path is same for all replicas so we need to iterate just once
@@ -988,6 +1046,7 @@ namespace webapi
                     JObject endpointHeader = null;
                     if (ep.Name != "")
                     {
+                        prefixWithListenerName = new StringBuilder(prefix, prefix.Length + ep.Name.Length + 1).Append(ep.Name).Append("/").ToString();
                         endpointHeader = new JObject();
                         endpointHeader.Add("name", "ListenerName");
                         endpointHeader.Add("value", ep.Name);
@@ -999,17 +1058,13 @@ namespace webapi
                         List<EnvoyHost> hostData = new List<EnvoyHost>();
                         string cluster = partitionId.ToString() + "|" + endpointIndex.ToString() + "|" + replicaIndexes[index].ToString();
                         string prefix_rewrite = ep.GetAt(index).endpoint_.AbsolutePath;
-                        List<JObject> headers = new List<JObject>();
-                        if (endpointHeader != null)
-                        {
-                            headers.Add(endpointHeader);
-                        }
+
+                        JObject statefulSecondaryIndex = null;
                         if (ep.GetAt(index).role_ == ServiceEndpointRole.StatefulSecondary)
                         {
-                            JObject statefulSecondaryIndex = new JObject();
+                            statefulSecondaryIndex = new JObject();
                             statefulSecondaryIndex.Add("name", "SecondaryReplicaIndex");
                             statefulSecondaryIndex.Add("value", replicaIndexes[index].ToString());
-                            headers.Add(statefulSecondaryIndex);
                         }
                         if (statefulPartition)
                         {
@@ -1017,17 +1072,12 @@ namespace webapi
                             var partitionKind = partition.partitionInformation_.Kind;
                             if (partitionKind == ServicePartitionKind.Int64Range)
                             {
-                                //if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-                                //{
-                                //    // Remove once Windows has Envoy 1.6
-                                //    continue;
-                                //}
-
                                 var rangePartitionInformation = (Int64RangePartitionInformation)partition.partitionInformation_;
                                 if (rangePartitionInformation.LowKey == Int64.MinValue &&
                                     rangePartitionInformation.HighKey == Int64.MaxValue)
                                 {
-                                    routeData.Add(new EnvoyRoute(cluster, prefix, prefix_rewrite, headers, EnvoyDefaults.timeout_ms));
+                                    routeData.AddRange(RoutesForReplica(cluster, prefix, prefix_rewrite, prefixWithListenerName, null,
+                                        endpointHeader, null, statefulSecondaryIndex));
                                 }
                                 else
                                 {
@@ -1039,9 +1089,8 @@ namespace webapi
                                         maxValHeader.Add("name", "PartitionKey");
                                         maxValHeader.Add("value", Int64.MaxValue.ToString());
 
-                                        List<JObject> maxValHeaders = new List<JObject>(headers);
-                                        maxValHeaders.Add(maxValHeader);
-                                        routeData.Add(new EnvoyRoute(cluster, prefix, prefix_rewrite, maxValHeaders, EnvoyDefaults.timeout_ms));
+                                        routeData.AddRange(RoutesForReplica(cluster, prefix, prefix_rewrite, prefixWithListenerName, null,
+                                            endpointHeader, maxValHeader, statefulSecondaryIndex));
                                     }
                                     else
                                     {
@@ -1055,9 +1104,8 @@ namespace webapi
                                     range_match.Add("end", rangeEnd);
                                     partitionKeyHeader.Add("range_match", range_match);
 
-                                    List<JObject> keyHeaders = new List<JObject>(headers);
-                                    keyHeaders.Add(partitionKeyHeader);
-                                    routeData.Add(new EnvoyRoute(cluster, prefix, prefix_rewrite, keyHeaders, EnvoyDefaults.timeout_ms));
+                                    routeData.AddRange(RoutesForReplica(cluster, prefix, prefix_rewrite, prefixWithListenerName, null,
+                                        endpointHeader, partitionKeyHeader, statefulSecondaryIndex));
                                 }
                             }
                             else if (partitionKind == ServicePartitionKind.Named)
@@ -1068,9 +1116,13 @@ namespace webapi
                                 partitionKeyHeader.Add("name", "PartitionKey");
                                 partitionKeyHeader.Add("value", namedPartitionInformation.Name);
 
-                                List<JObject> keyHeaders = new List<JObject>(headers);
-                                keyHeaders.Add(partitionKeyHeader);
-                                routeData.Add(new EnvoyRoute(cluster, prefix, prefix_rewrite, keyHeaders, EnvoyDefaults.timeout_ms));
+                                routeData.AddRange(RoutesForReplica(cluster, prefix, prefix_rewrite, prefixWithListenerName, namedPartitionInformation.Name,
+                                    endpointHeader, partitionKeyHeader, statefulSecondaryIndex));
+                            }
+                            else if (partitionKind == ServicePartitionKind.Singleton)
+                            {
+                                routeData.AddRange(RoutesForReplica(cluster, prefix, prefix_rewrite, prefixWithListenerName, null,
+                                    endpointHeader, null, statefulSecondaryIndex));
                             }
                         }
                         else
@@ -1081,7 +1133,8 @@ namespace webapi
                                 var address = ep.GetAt(i);
                                 hostData.Add(new EnvoyHost(address.endpoint_.Host, address.endpoint_.Port));
                             }
-                            routeData.Add(new EnvoyRoute(cluster, prefix, prefix_rewrite, headers, EnvoyDefaults.timeout_ms));
+                            routeData.AddRange(RoutesForReplica(cluster, prefix, prefix_rewrite, prefixWithListenerName, null,
+                                endpointHeader, null, statefulSecondaryIndex));
                         }
                         if (ep.GetAt(index).endpoint_.Scheme == "https")
                         {
