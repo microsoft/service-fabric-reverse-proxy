@@ -31,8 +31,6 @@ docker pull $BRANCH/service-fabric-reverse-proxy:latest
 # Build the Docker images
 echo docker build -t $BRANCH/service-fabric-reverse-proxy:$TAG --label GIT_COMMIT=$GIT_COMMIT ./sfintegration/bin/$config/netcoreapp2.1/ubuntu.16.04-x64/publish/.
 docker build -t $BRANCH/service-fabric-reverse-proxy:$TAG --label GIT_COMMIT=$GIT_COMMIT ./sfintegration/bin/$config/netcoreapp2.1/ubuntu.16.04-x64/publish/.
-echo docker tag $BRANCH/service-fabric-reverse-proxy:$TAG $BRANCH/service-fabric-reverse-proxy:0.20.0
-docker tag $BRANCH/service-fabric-reverse-proxy:$TAG $BRANCH/service-fabric-reverse-proxy:0.20.0
 echo docker tag $BRANCH/service-fabric-reverse-proxy:$TAG $BRANCH/service-fabric-reverse-proxy:xenial-$TAG
 docker tag $BRANCH/service-fabric-reverse-proxy:$TAG $BRANCH/service-fabric-reverse-proxy:xenial-$TAG
 echo docker tag $BRANCH/service-fabric-reverse-proxy:$TAG $BRANCH/service-fabric-reverse-proxy:latest
@@ -42,8 +40,6 @@ docker tag $BRANCH/service-fabric-reverse-proxy:$TAG $BRANCH/service-fabric-reve
 echo $DOCKER_PASSWORD | docker login -u="$DOCKER_USERNAME" --password-stdin
 echo docker push $BRANCH/service-fabric-reverse-proxy:$TAG
 docker push $BRANCH/service-fabric-reverse-proxy:$TAG
-echo docker push $BRANCH/service-fabric-reverse-proxy:0.20.0
-docker push $BRANCH/service-fabric-reverse-proxy:0.20.0
 echo docker push $BRANCH/service-fabric-reverse-proxy:xenial-$TAG
 docker push $BRANCH/service-fabric-reverse-proxy:xenial-$TAG
 echo docker push $BRANCH/service-fabric-reverse-proxy:latest
