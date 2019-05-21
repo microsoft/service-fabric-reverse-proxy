@@ -1,5 +1,5 @@
 
-set TAG=0.20.0
+set TAG=0.30.0-test
 set BRANCH=%1
 set GIT_COMMIT=%2
 set DOCKER_USERNAME=%3
@@ -27,8 +27,8 @@ echo docker tag %BRANCH%/service-fabric-reverse-proxy:windows-%TAG% %BRANCH%/ser
 docker tag %BRANCH%/service-fabric-reverse-proxy:windows-%TAG% %BRANCH%/service-fabric-reverse-proxy:windows-latest
 
 REM # Login to Docker Hub and upload images
-REM echo $DOCKER_PASSWORD | docker login -u="$DOCKER_USERNAME" --password-stdin
-REM echo docker push %BRANCH%/service-fabric-reverse-proxy:windows-%TAG%
-REM docker push %BRANCH%/service-fabric-reverse-proxy:windows-%TAG%
+ echo $DOCKER_PASSWORD | docker login -u="$DOCKER_USERNAME" --password-stdin
+ echo docker push %BRANCH%/service-fabric-reverse-proxy:windows-%TAG%
+ docker push %BRANCH%/service-fabric-reverse-proxy:windows-%TAG%
 REM echo docker push %BRANCH%/service-fabric-reverse-proxy:windows-latest
 REM docker push %BRANCH%/service-fabric-reverse-proxy:windows-latest

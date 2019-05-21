@@ -8,7 +8,7 @@
   </PropertyGroup>
 
   <PropertyGroup >
-    <DefineConstants Condition="'$(deploy_environment)'=='Mesh_Development'">$(DefineConstants);DEVELOPMENT_ENVIRONMENT</DefineConstants>
+    <DefineConstants>$(DefineConstants);DEVELOPMENT_ENVIRONMENT</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
