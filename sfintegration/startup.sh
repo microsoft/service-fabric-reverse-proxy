@@ -35,8 +35,6 @@ else
             echo $(timestamperror) Invalid Reverse Proxy Thumbprint | tee -a ${reverse_proxy_log_path}.log
             exit 1
         fi
-        sed -e s/ReverseProxyCertThumbprint/$(echo ${ReverseProxyCertThumbprint} | sed 's/[&/\]/\\&/g')/g \
-            config.secure.template.json > ./config.secure.json
         config_file=config.secure.json
     else
         config_file=config.json
