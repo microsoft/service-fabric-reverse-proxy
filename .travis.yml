@@ -1,3 +1,4 @@
+dist: bionic
 language: csharp
 services:
   - docker
@@ -11,7 +12,13 @@ branches:
   - sridmad
 install:
   - export DOTNET_CLI_TELEMETRY_OPTOUT=1
+  - sudo curl -sSL https://get.docker.com/ | sh
 before_script:
   - chmod a+x ./deploycontainer.sh
+  - mkdir -p ~/.docker/cli-plugins
+  - wget -O - https://github.com/docker/buildx/releases/download/v0.5.1/buildx-v0.5.1.linux-amd64 > ~/.docker/cli-plugins/docker-buildx
+  - chmod a+x ~/.docker/cli-plugins/docker-buildx
+  - docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+  - docker buildx create --use --name mybuilder
 script:
   - ./deploycontainer.sh $TRAVIS_BRANCH $TRAVIS_COMMIT $DOCKER_USERNAME $DOCKER_PASSWORD $TRAVIS_TAG

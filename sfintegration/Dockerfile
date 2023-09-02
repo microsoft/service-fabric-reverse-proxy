@@ -1,4 +1,4 @@
-FROM envoyproxy/envoy:866a4bab8c1e7809e26409ac9636843070b2f61c
+FROM envoyproxy/envoy:v1.17-latest
 
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y \
