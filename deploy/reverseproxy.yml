@@ -3,7 +3,7 @@ services:
   Reverse_Proxy_Service:
     deploy:
       replicas: -1
-    image: microsoft/service-fabric-reverse-proxy:0.30.0
+    image: microsoft/service-fabric-reverse-proxy:0.40.0
     volumes:
     - /var/lib/sfcerts:/var/lib/sfcerts
     environment:

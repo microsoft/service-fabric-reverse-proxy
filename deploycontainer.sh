@@ -1,6 +1,6 @@
 #!/bin/bash
 
-TAG=0.31.0
+TAG=0.40.0
 BRANCH=$1
 GIT_COMMIT=$2
 DOCKER_USERNAME=$3
